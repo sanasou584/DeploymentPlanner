@@ -88,9 +88,13 @@ function deployment(component: PlanComponent): ManifestOutput {
           containers: [{
             name,
             image: component.image,
-            ports: [{
-              containerPort: component.containerPort,
-            }],
+                        ...(component.containerPort !== null
+              ? {
+                  ports: [{
+                    containerPort: component.containerPort,
+                  }],
+                }
+              : {}),
             resources: {
               requests: {
                 cpu: component.resources.requests.cpu,
@@ -245,11 +249,19 @@ export function buildKubernetesManifests(
 
     seen.add(name);
 
-    output.push(
-      deployment(component),
-      service(component),
-    );
+    output.push(deployment(component));
 
+    if (component.containerPort !== null) {
+      output.push(service(component));
+    }
+        if (
+      component.ingress.enabled &&
+      component.containerPort === null
+    ) {
+      throw new ConflictError(
+        `Ingress for ${name} requires an exposed container port`,
+      );
+    }
     if (component.ingress.enabled) {
       output.push(ingress(component));
     }

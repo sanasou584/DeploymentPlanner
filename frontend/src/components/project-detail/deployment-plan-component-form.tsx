@@ -112,19 +112,29 @@ export function DeploymentPlanComponentForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <NumberField
-          id={`${prefix}-port`}
-          label="Container port"
-          value={component.containerPort || undefined}
-          min={1}
-          max={65535}
-          disabled={disabled}
-          onChange={(value) =>
-            updateComponent({
-              containerPort: value ?? 0,
-            })
-          }
-        />
+                <div className="flex flex-col gap-2">
+          <NumberField
+            id={`${prefix}-port`}
+            label="Container port"
+            value={component.containerPort ?? undefined}
+            min={1}
+            max={65535}
+            disabled={disabled}
+            onChange={(value) =>
+              updateComponent({
+                containerPort:
+                  value ??
+                  (component.type === "WORKER" ? null : 0),
+              })
+            }
+          />
+
+          {component.type === "WORKER" ? (
+            <p className="font-display text-body-sm text-mist">
+              Optional for workers that do not expose a network port.
+            </p>
+          ) : null}
+        </div>
 
         <NumberField
           id={`${prefix}-replicas`}

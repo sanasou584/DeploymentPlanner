@@ -78,8 +78,11 @@ export function groundPlanComponents(
 
     return {
       ...component,
-      containerPort:
-        source.containerPort ?? component.containerPort,
+        containerPort:
+        component.type === 'WORKER' &&
+        source.containerPort === null
+          ? null
+          : source.containerPort ?? component.containerPort,
         image: source.image ?? component.image,
       resources: hasResources
         ? {

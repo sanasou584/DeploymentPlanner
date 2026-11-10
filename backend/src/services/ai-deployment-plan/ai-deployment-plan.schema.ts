@@ -33,15 +33,21 @@ const ingress = z.strictObject({
 export const aiPlanComponentSchema = z.strictObject({
   name: z.string().trim().min(1),
   type: z.enum(PLAN_COMPONENT_TYPES),
-  containerPort: z.number().int().min(1).max(65535),
+  containerPort: z.number().int().min(1).max(65535).nullable(),
   image: z.string().trim().min(1).optional(),
   replicas: z.number().int().min(1).max(100),
   resources,
   hpa,
   ingress,
+  servicePort: z.number().int().min(1).max(65535).nullable().optional(),
+  targetPort: z.union([
+    z.number().int().min(1).max(65535),
+    z.string().trim().min(1),
+  ]).nullable().optional(),
 });
 
 export const aiPlanResultSchema = z.strictObject({
+
   components: z.array(aiPlanComponentSchema).min(1).max(100),
   assumptions: z.array(z.string().trim().min(1).max(500)).max(30),
 });

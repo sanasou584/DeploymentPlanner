@@ -70,7 +70,10 @@ function buildInitialComponents(
     return {
       name: component.name,
       type: component.type as PlanComponentType,
-      containerPort: evidence?.containerPort ?? 0,
+      containerPort:
+        component.type === "WORKER" && evidence?.containerPort == null
+          ? null
+          : evidence?.containerPort ?? 0,
       image: evidence?.image ?? undefined,
       replicas: 1,
       resources: {
@@ -97,10 +100,13 @@ function buildInitialComponents(
 function isComponentValid(component: PlanComponent): boolean {
   const { resources, hpa, ingress } = component;
 
-  const validPort =
-    Number.isInteger(component.containerPort) &&
-    component.containerPort >= 1 &&
-    component.containerPort <= 65535;
+    const validPort =
+    (component.type === "WORKER" &&
+      component.containerPort === null) ||
+    (component.containerPort !== null &&
+      Number.isInteger(component.containerPort) &&
+      component.containerPort >= 1 &&
+      component.containerPort <= 65535);
 
   const validReplicas =
     Number.isInteger(component.replicas) &&

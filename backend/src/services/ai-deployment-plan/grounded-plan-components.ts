@@ -12,11 +12,104 @@ export interface GroundedComponent {
   kubernetes?: AnalysisKubernetesEvidence;
 }
 
+type PlanComponents = AiPlanResult['components'];
+
+function resourcesFromEvidence(
+  component: PlanComponents[number],
+  source: AnalysisKubernetesEvidence,
+): PlanComponents[number]['resources'] {
+  const requests = source.resources?.requests;
+  const limits = source.resources?.limits;
+
+  return {
+    requests: {
+      cpu: requests?.cpu ?? component.resources.requests.cpu,
+      memory: requests?.memory ?? component.resources.requests.memory,
+    },
+    limits: {
+      cpu: limits?.cpu ?? component.resources.limits.cpu,
+      memory: limits?.memory ?? component.resources.limits.memory,
+    },
+  };
+}
+
+function evidenceWarnings(
+  component: PlanComponents[number],
+  source: AnalysisKubernetesEvidence,
+): string[] {
+  const warnings: string[] = [];
+
+  if (source.requiresReview) {
+    warnings.push(
+      `${component.name}: Kubernetes evidence requires review`,
+    );
+  }
+
+  if (!source.image) {
+    warnings.push(
+      `${component.name}: container image was not detected`,
+    );
+  } else if (
+    !source.image.includes('/') &&
+    !source.image.includes('@')
+  ) {
+    warnings.push(
+      `${component.name}: image "${source.image}" requires registry or build verification`,
+    );
+  }
+
+  if (source.containerPort === null) {
+    warnings.push(
+      `${component.name}: no container port declared`,
+    );
+  }
+
+  if (source.resources === null) {
+    warnings.push(
+      `${component.name}: resource limits and requests were not detected`,
+    );
+  }
+
+  return warnings;
+}
+
+function applyEvidence(
+  component: PlanComponents[number],
+  source: AnalysisKubernetesEvidence,
+): PlanComponents[number] {
+  const noPortWorker =
+    component.type === 'WORKER' &&
+    source.containerPort === null;
+
+  const containerPort = noPortWorker
+    ? null
+    : source.containerPort ?? component.containerPort;
+
+  return {
+    ...component,
+    containerPort,
+    servicePort: containerPort === null
+      ? null
+      : source.servicePort ?? component.servicePort ?? null,
+    targetPort: containerPort === null
+      ? null
+      : source.targetPort ?? component.targetPort ?? null,
+    image: source.image ?? component.image,
+    resources: resourcesFromEvidence(component, source),
+    ingress: containerPort === null
+      ? {
+          ...component.ingress,
+          enabled: false,
+        }
+      : component.ingress,
+  };
+}
+
 export function groundPlanComponents(
-  components: AiPlanResult['components'],
-  evidence: GroundedComponent[],
+  components: PlanComponents,
+  evidence: readonly GroundedComponent[],
 ): {
-  components: AiPlanResult['components'];
+  components: PlanComponents;
   warnings: string[];
 } {
   const byName = new Map(
@@ -37,66 +130,15 @@ export function groundPlanComponents(
       warnings.push(
         `${component.name}: Kubernetes evidence unavailable`,
       );
+
       return component;
     }
 
-    const requests = source.resources?.requests;
-    const limits = source.resources?.limits;
-
-    const hasResources = Boolean(
-      requests?.cpu &&
-      requests?.memory &&
-      limits?.cpu &&
-      limits?.memory,
+    warnings.push(
+      ...evidenceWarnings(component, source),
     );
 
-    const hasDeployableImage = Boolean(
-      source.image &&
-      (
-        source.image.includes('/') ||
-        source.image.includes('@')
-      ),
-    );
-
-    if (source.requiresReview) {
-      warnings.push(
-        `${component.name}: Kubernetes configuration requires review`,
-      );
-    }
-
-    if (source.image && !hasDeployableImage) {
-      warnings.push(
-        `${component.name}: image ${source.image} requires a build or registry resolution`,
-      );
-    }
-
-    if (source.containerPort === null) {
-      warnings.push(
-        `${component.name}: container port not declared in the repository`,
-      );
-    }
-
-    return {
-      ...component,
-        containerPort:
-        component.type === 'WORKER' &&
-        source.containerPort === null
-          ? null
-          : source.containerPort ?? component.containerPort,
-        image: source.image ?? component.image,
-      resources: hasResources
-        ? {
-            requests: {
-              cpu: requests!.cpu!,
-              memory: requests!.memory!,
-            },
-            limits: {
-              cpu: limits!.cpu!,
-              memory: limits!.memory!,
-            },
-          }
-        : component.resources,
-    };
+    return applyEvidence(component, source);
   });
 
   return {

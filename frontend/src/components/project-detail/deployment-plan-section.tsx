@@ -56,6 +56,7 @@ function getApiError(error: unknown): string {
   );
 }
 
+
 function buildInitialComponents(
   analysis: Analysis | null,
 ): PlanComponent[] {
@@ -70,12 +71,18 @@ function buildInitialComponents(
     return {
       name: component.name,
       type: component.type as PlanComponentType,
+
       containerPort:
-        component.type === "WORKER" && evidence?.containerPort == null
+        component.type === "WORKER" &&
+        evidence?.containerPort == null
           ? null
           : evidence?.containerPort ?? 0,
+
+      servicePort: evidence?.servicePort ?? null,
+      targetPort: evidence?.targetPort ?? null,
       image: evidence?.image ?? undefined,
       replicas: 1,
+
       resources: {
         requests: {
           cpu: resources?.requests.cpu ?? "",
@@ -86,9 +93,11 @@ function buildInitialComponents(
           memory: resources?.limits.memory ?? "",
         },
       },
+
       hpa: {
         enabled: false,
       },
+
       ingress: {
         enabled: false,
         tls: false,
@@ -96,6 +105,7 @@ function buildInitialComponents(
     };
   });
 }
+
 
 function isComponentValid(component: PlanComponent): boolean {
   const { resources, hpa, ingress } = component;
@@ -393,6 +403,8 @@ export function DeploymentPlanSection({
         name: editingName,
         body: {
           containerPort: editedComponent.containerPort,
+          servicePort: editedComponent.servicePort ?? null,
+          targetPort: editedComponent.targetPort ?? null,
           ...(editedComponent.image
             ? { image: editedComponent.image }
             : {}),

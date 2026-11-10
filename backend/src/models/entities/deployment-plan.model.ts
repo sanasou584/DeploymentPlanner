@@ -46,7 +46,7 @@ import {
 export interface PlanComponent {
   name: string;
   type: PlanComponentType;
-  containerPort: number;
+  containerPort: number | null;
   servicePort?: number | null;
   targetPort?: number | string | null;
   image?: string;
@@ -150,6 +150,7 @@ const PLAN_MACHINE = defineStateMachine<PlanStatus>({
   SUPERSEDED: [],
 });
 
+
 const componentSchema = new Schema<PlanComponent>(
   {
     name: {
@@ -167,50 +168,54 @@ const componentSchema = new Schema<PlanComponent>(
 
     containerPort: {
       type: Number,
-      required: true,
+      default: null,
       min: 1,
       max: 65535,
+      validate: {
+        validator: function (
+          this: PlanComponent,
+          value: number | null,
+        ): boolean {
+          return this.type === 'WORKER' ||
+            (value !== null &&
+              Number.isInteger(value) &&
+              value >= 1 &&
+              value <= 65535);
+        },
+        message: 'Non-worker components require a valid container port',
+      },
     },
 
     servicePort: {
       type: Number,
-      required: false,
+      default: null,
       min: 1,
       max: 65535,
-      default: undefined,
     },
 
     targetPort: {
       type: Schema.Types.Mixed,
-      required: false,
-      default: undefined,
+      default: null,
       validate: {
         validator: (value: unknown): boolean => {
-          if (
-            value === undefined ||
-            value === null
-          ) {
+          if (value === undefined || value === null) {
             return true;
           }
 
           if (typeof value === 'number') {
-            return (
-              Number.isInteger(value) &&
+            return Number.isInteger(value) &&
               value >= 1 &&
-              value <= 65535
-            );
+              value <= 65535;
           }
 
           if (typeof value === 'string') {
-            return /^[a-z][a-z0-9-]*$/.test(value) &&
-              value.length <= 15 &&
-              !value.endsWith('-');
+            return value.length <= 15 &&
+              /^[a-z]([a-z0-9-]*[a-z0-9])?$/.test(value);
           }
 
           return false;
         },
-        message:
-          'targetPort must be a valid port number or Kubernetes port name',
+        message: 'Invalid Kubernetes targetPort',
       },
     },
 
@@ -250,6 +255,32 @@ const componentSchema = new Schema<PlanComponent>(
     },
   },
 );
+
+componentSchema.pre('validate', function () {
+  const component = this as unknown as PlanComponent;
+
+  if (
+    component.containerPort === null &&
+    component.ingress?.enabled
+  ) {
+    throw new ConflictError(
+      `Ingress requires a container port for ${component.name}`,
+    );
+  }
+
+  if (
+    component.containerPort === null &&
+    (
+      component.servicePort != null ||
+      component.targetPort != null
+    )
+  ) {
+    throw new ConflictError(
+      `Service ports require a container port for ${component.name}`,
+    );
+  }
+});
+
 
 const reviewSchema = new Schema<PlanReview>(
   {

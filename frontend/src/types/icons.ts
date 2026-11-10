@@ -71,4 +71,6 @@ export type MaterialIconName =
   | "refresh"
   | "chevron_right"
   | "expand_less"
-  | "filter_list";
+  | "filter_list"
+  | "save"
+  | "info";

@@ -15,6 +15,7 @@ import { Button } from "@/shared/button";
 import { MaterialIcon } from "@/shared/material-icon";
 
 import { DeploymentPlanComponentForm } from "@/components/project-detail/deployment-plan-component-form";
+import { KubernetesManifestSection } from "@/components/project-detail/kubernetes-manifest-section";
 
 import {
   useListDeploymentPlansQuery,
@@ -130,7 +131,12 @@ function isComponentValid(component: PlanComponent): boolean {
     !ingress.enabled ||
     Boolean(ingress.host?.trim());
 
+    const validImage =
+    typeof component.image === "string" &&
+    component.image.trim().length > 0;
+
   return (
+    validImage &&
     validPort &&
     validReplicas &&
     resourcesPresent &&
@@ -401,8 +407,9 @@ export function DeploymentPlanSection({
     if (
       !selectedPlan ||
       selectedPlan.status !== "DRAFT" ||
-      editingName !== null ||
-      isBusy
+            editingName !== null ||
+            !selectedPlan.components.every(isComponentValid) ||
+            isBusy
     ) {
       return;
     }
@@ -850,6 +857,13 @@ export function DeploymentPlanSection({
                   );
                 })}
 
+                                <KubernetesManifestSection
+                  key={selectedPlan.id}
+                  projectId={projectId}
+                  planId={selectedPlan.id}
+                  approved={selectedPlan.status === "APPROVED"}
+                />
+
                 {selectedPlan.review?.reason ? (
                   <div className="rounded-xl border border-crimson/40 bg-crimson/10 p-5">
                     <h3 className="font-display text-body-md font-semibold text-crimson">
@@ -891,7 +905,8 @@ export function DeploymentPlanSection({
                         <Button
                           disabled={
                             isBusy ||
-                            editingName !== null
+                            editingName !== null ||
+                            !selectedPlan.components.every(isComponentValid)
                           }
                           onClick={() =>
                             void handleApprovePlan()

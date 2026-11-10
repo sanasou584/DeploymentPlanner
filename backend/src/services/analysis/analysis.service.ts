@@ -1,4 +1,7 @@
 import { Types } from 'mongoose';
+import {
+  assertAnalysisComponentCoverage,
+} from './analysis-component-coverage.js';
 
 import { ConflictError, NotFoundError } from '../../domain/errors/index.js';
 import type { AnalysisDocument, ProjectDocument } from '../../models/entities/index.js';
@@ -173,7 +176,15 @@ export function createAnalysisService(
     input: CompleteAnalysisBody,
   ): Promise<AnalysisDocument> {
     const analysis = await findForWorkflow(analysisId);
-    const completed = await analysis.complete(input as CompleteAnalysisInput);
+
+    assertAnalysisComponentCoverage(
+      input.detectedFiles ?? analysis.detectedFiles,
+      input.components ?? analysis.components,
+    );
+
+    const completed = await analysis.complete(
+      input as CompleteAnalysisInput,
+    );
 
     await recordCompleted(completed);
 

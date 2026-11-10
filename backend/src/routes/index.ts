@@ -49,6 +49,8 @@ import { createN8nAiPlanTrigger } from '../services/ai-deployment-plan/n8n-ai-pl
 import { createAiDeploymentPlanRouter } from './ai-deployment-plan.routes.js';
 import { createDeploymentPlanRouter } from './deployment-plan.routes.js';
 import { createDeploymentPlanService } from '../services/deployment-plans/deployment-plan.service.js';
+import { createKubernetesManifestService } from '../services/kubernetes-manifests/kubernetes-manifest.service.js';
+import { createKubernetesManifestRouter } from './kubernetes-manifest.routes.js';
 
 
 
@@ -85,13 +87,14 @@ export function createApiRouter(): Router {
   const repositoryLink = createRepositoryLinkService(projects);
   const analysisTrigger = createN8nAnalysisTrigger(env.n8nAnalysisWebhookUrl, env.n8nSharedSecret);
   const recommendationService = createRecommendationService(recommendations, analyses, auditLogs);
-  const deploymentPlanService = createDeploymentPlanService(
+    const deploymentPlanService = createDeploymentPlanService(
     plans,
     projects,
     analyses,
     recommendations,
     auditLogs,
   );
+  const kubernetesManifestService = createKubernetesManifestService();
   const aiAuditTrigger = createN8nAiAuditTrigger(env.n8nAiAuditWebhookUrl, env.n8nSharedSecret);
   const aiAuditService = createAiAuditService(aiAuditTrigger, analyses, projects, auditLogs);
     const aiPlanTrigger = createN8nAiPlanTrigger(
@@ -173,9 +176,13 @@ export function createApiRouter(): Router {
     '/internal/analyses',
     createRecommendationInternalRouter(recommendationService, requireInternalSecret),
   );
-  router.use(
+    router.use(
     '/internal/analyses',
     createAiAuditInternalRouter(aiAuditService, requireInternalSecret),
+  );
+  router.use(
+    '/projects',
+    createAiAuditRouter(aiAuditService, requireAuth),
   );
   // Self-scoped profile (self-vs-admin read: mounted at /profile)
   router.use('/profile', createProfileRouter(profileService, requireAuth));
@@ -201,5 +208,13 @@ router.use(
     requireAuth,
   ),
 );
+  router.use(
+    '/projects',
+    createKubernetesManifestRouter(
+      kubernetesManifestService,
+      requireAuth,
+    ),
+  );
+
   return router;
 }

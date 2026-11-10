@@ -51,6 +51,8 @@ import { createDeploymentPlanRouter } from './deployment-plan.routes.js';
 import { createDeploymentPlanService } from '../services/deployment-plans/deployment-plan.service.js';
 import { createKubernetesManifestService } from '../services/kubernetes-manifests/kubernetes-manifest.service.js';
 import { createKubernetesManifestRouter } from './kubernetes-manifest.routes.js';
+import { createDockerfileProposalsRouter } from './dockerfile-proposals.routes.js';
+import { createDockerfileProposalService } from '../services/dockerfile-proposals/dockerfile-proposals.service.js';
 
 
 
@@ -158,7 +160,14 @@ export function createApiRouter(): Router {
   // User project management
   router.use('/projects', createProjectRouter(projectService, requireAuth));
   router.use('/projects', createRepositoryLinkRouter(repositoryLink, requireAuth));
-  router.use('/projects', createAnalysisRouter(analysisService, requireAuth));
+    router.use('/projects', createAnalysisRouter(analysisService, requireAuth));
+  router.use(
+    '/projects',
+    createDockerfileProposalsRouter(
+      createDockerfileProposalService(),
+      requireAuth,
+    ),
+  );
   router.use('/projects', createRecommendationRouter(recommendationService, requireAuth));
     router.use(
     '/projects',

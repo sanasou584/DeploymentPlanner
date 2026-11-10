@@ -2,6 +2,10 @@
 import { Types } from 'mongoose';
 
 import {
+  assertPlanImagesReady,
+} from '../plan-quality/container-image-quality.js';
+
+import {
   ConflictError,
   NotFoundError,
 } from '../../domain/errors/index.js';
@@ -226,6 +230,8 @@ export function createDeploymentPlanService(
       projectId,
       planId,
     );
+
+    assertPlanImagesReady(plan.components);
 
     const approved = await plan.approve(
       new Types.ObjectId(userId),

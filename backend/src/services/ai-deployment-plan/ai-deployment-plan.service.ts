@@ -1,5 +1,8 @@
-
 import { Types } from 'mongoose';
+
+import {
+  assertAiProposalImages,
+} from '../plan-quality/container-image-quality.js';
 
 import {
   ConflictError,
@@ -149,8 +152,12 @@ export function createAiDeploymentPlanService(
       'Invalid AI deployment plan proposal',
     );
 
-    validateComponents(
+        validateComponents(
       context.components,
+      proposal.components,
+    );
+
+    assertAiProposalImages(
       proposal.components,
     );
 

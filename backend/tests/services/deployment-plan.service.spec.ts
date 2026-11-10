@@ -151,7 +151,62 @@ describe('deployment plan service', () => {
       service.list(foreignUser, project.id),
     ).rejects.toThrow('Project not found');
   });
+    it('updates a draft component and persists changes without an image', async () => {
+    const { user, project, analysis } = await makeFixture();
 
+    const plan = await service.create(
+      user.id,
+      project.id,
+      {
+        analysisId: analysis.id,
+        components: [sampleComponent],
+      },
+    );
+
+    await service.updateComponent(
+      user.id,
+      project.id,
+      plan.id,
+      'api',
+      {
+        containerPort: 4500,
+        replicas: 3,
+        image: '',
+        resources: {
+          requests: {
+            cpu: '200m',
+            memory: '256Mi',
+          },
+          limits: {
+            cpu: '500m',
+            memory: '512Mi',
+          },
+        },
+      },
+    );
+
+    const persisted = await DeploymentPlan.findById(plan.id);
+
+    expect(persisted).not.toBeNull();
+    expect(persisted?.status).toBe('DRAFT');
+
+    const component = persisted?.components[0];
+
+    expect(component?.containerPort).toBe(4500);
+    expect(component?.replicas).toBe(3);
+    expect(component?.image).toBe('');
+    expect(component?.resources.requests.cpu).toBe('200m');
+    expect(component?.resources.requests.memory).toBe('256Mi');
+
+    await expect(
+      service.approve(user.id, project.id, plan.id),
+    ).rejects.toThrow(
+      /container image is required/,
+    );
+
+    const unchanged = await DeploymentPlan.findById(plan.id);
+    expect(unchanged?.status).toBe('DRAFT');
+  });
   it('approves a draft and blocks editing after approval', async () => {
     const { user, project, analysis } = await makeFixture();
 

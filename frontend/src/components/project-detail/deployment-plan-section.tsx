@@ -261,8 +261,10 @@ export function DeploymentPlanSection({
     rejectMeta.isLoading;
 
   const manualValid =
-    manualComponents.length > 0 &&
-    manualComponents.every(isComponentValid);
+  manualComponents.length > 0 &&
+  manualComponents.every(
+    (component) => isComponentValid(component, false),
+  );
 
   const selectedAssumptions =
     aiAssumptions && selectedPlan && aiAssumptions.planId === selectedPlan.id
@@ -938,7 +940,9 @@ export function DeploymentPlanSection({
                           disabled={
                             isBusy ||
                             editingName !== null ||
-                            !selectedPlan.components.every(isComponentValid)
+                            !selectedPlan.components.every(
+                                (component) => isComponentValid(component, true),
+                              )
                           }
                           onClick={() =>
                             void handleApprovePlan()

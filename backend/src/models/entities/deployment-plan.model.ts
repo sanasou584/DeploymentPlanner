@@ -173,10 +173,12 @@ const componentSchema = new Schema<PlanComponent>(
       max: 65535,
       validate: {
         validator: function (
-          this: PlanComponent,
+          this: unknown,
           value: number | null,
         ): boolean {
-          return this.type === 'WORKER' ||
+          const component = this as PlanComponent;
+
+          return component.type === 'WORKER' ||
             (value !== null &&
               Number.isInteger(value) &&
               value >= 1 &&

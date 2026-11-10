@@ -32,19 +32,11 @@ const manifestPath =
   `/api/v1/projects/${projectId}/plans/${planId}/manifests`;
 
 const generate = vi.fn(
-  async (
-    _userId: string,
-    _projectId: string,
-    _planId: string,
-  ) => [],
+  async () => [],
 );
 
 const list = vi.fn(
-  async (
-    _userId: string,
-    _projectId: string,
-    _planId: string,
-  ) => [],
+  async () => [],
 );
 
 const service = {

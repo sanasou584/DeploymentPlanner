@@ -16,6 +16,7 @@ import {
   type RecommendationStatus,
 } from '../../domain/enums/recommendation.enums.js';
 import { defineStateMachine } from '../../domain/state-machine/define-state-machine.js';
+import { ConflictError } from '../../domain/errors/index.js';
 import { baseSchemaOptions } from '../plugins/base-schema-options.js';
 
 /**
@@ -66,11 +67,24 @@ export interface RecommendationStatics {
     proposedFile?: RecommendationProposedFile;
   }): Promise<RecommendationDocument>;
 }
-
+export interface RecommendationEnrichment {
+  generatedBy: RecommendationGeneratedBy;
+  type: RecommendationType;
+  severity: RecommendationSeverity;
+  title: string;
+  description: string;
+  componentName?: string;
+  suggestedValue?: string;
+  confidence?: number;
+  proposedFile?: RecommendationProposedFile;
+}
 export interface RecommendationMethods {
   accept(user: Types.ObjectId): Promise<RecommendationDocument>;
   reject(user: Types.ObjectId, note?: string): Promise<RecommendationDocument>;
   isPending(): boolean;
+  enrichFromAi(
+    input: RecommendationEnrichment,
+  ): Promise<RecommendationDocument>;
 }
 
 export type RecommendationDocument = HydratedDocument<
@@ -175,7 +189,73 @@ recommendationSchema.statics.fromAi = async function fromAi(
 
   return created.save() as unknown as Promise<RecommendationDocument>;
 };
+const SEVERITY_RANK: Record<
+  RecommendationSeverity,
+  number
+> = {
+  INFO: 0,
+  WARNING: 1,
+  CRITICAL: 2,
+};
 
+recommendationSchema.methods.enrichFromAi =
+  async function enrichFromAi(
+    this: RecommendationDocument,
+    input: RecommendationEnrichment,
+  ): Promise<RecommendationDocument> {
+    if (this.get('status') !== 'PENDING') {
+      throw new ConflictError(
+        'Only pending recommendations can be enriched',
+      );
+    }
+
+    const currentSeverity = this.get(
+      'severity',
+    ) as RecommendationSeverity;
+
+    const severity =
+      SEVERITY_RANK[input.severity] >
+      SEVERITY_RANK[currentSeverity]
+        ? input.severity
+        : currentSeverity;
+
+    const staticDescription = this.get(
+      'description',
+    ) as string;
+
+    const description = [
+      `Static audit: ${staticDescription}`,
+      `AI audit: ${input.description}`,
+    ]
+      .join('\n\n')
+      .slice(0, DESCRIPTION_MAX);
+
+    this.set('type', input.type);
+    this.set('severity', severity);
+    this.set('title', input.title);
+    this.set('description', description);
+    this.set('generatedBy', input.generatedBy);
+
+    if (input.componentName !== undefined) {
+      this.set('componentName', input.componentName);
+    }
+
+    if (input.suggestedValue !== undefined) {
+      this.set('suggestedValue', input.suggestedValue);
+    }
+
+    if (input.confidence !== undefined) {
+      this.set('confidence', input.confidence);
+    }
+
+    if (input.proposedFile !== undefined) {
+      this.set('proposedFile', input.proposedFile);
+    }
+
+    return this.save() as unknown as Promise<
+      RecommendationDocument
+    >;
+  };
 const decide = async (
   recommendation: RecommendationDocument,
   user: Types.ObjectId,

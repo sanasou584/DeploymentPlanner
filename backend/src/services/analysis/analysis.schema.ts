@@ -45,7 +45,23 @@ const kubernetesResourcesSchema = z.strictObject({
   requests: kubernetesQuantitySchema,
   limits: kubernetesQuantitySchema,
 });
-
+const portEvidenceSchema = z.strictObject({
+  sourceFile: z.string().trim().min(1),
+  origin: z.enum([
+    'KUBERNETES_MANIFEST',
+    'SOURCE_CODE',
+    'FRAMEWORK_CONFIG',
+    'DOCKERFILE',
+    'ENV_EXAMPLE',
+  ]),
+  confidence: z.enum([
+    'HIGH',
+    'MEDIUM',
+    'LOW',
+  ]),
+  requiresReview: z.boolean(),
+  line: z.number().int().min(1).optional(),
+});
 const kubernetesEvidenceSchema = z.strictObject({
   containerPort: z
     .number()
@@ -76,7 +92,8 @@ const kubernetesEvidenceSchema = z.strictObject({
     .array(z.string().trim().min(1))
     .max(100),
 
-  requiresReview: z.boolean(),
+    requiresReview: z.boolean(),
+  portEvidence: portEvidenceSchema.optional(),
 });
 
 const componentSchema = z.strictObject({

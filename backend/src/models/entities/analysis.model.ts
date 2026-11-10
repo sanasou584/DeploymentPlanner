@@ -34,7 +34,18 @@ export interface AnalysisTechnology {
   category: TechnologyCategory;
   sourceFile?: string;
 }
-
+export interface AnalysisPortEvidence {
+  sourceFile: string;
+  origin:
+    | 'KUBERNETES_MANIFEST'
+    | 'SOURCE_CODE'
+    | 'FRAMEWORK_CONFIG'
+    | 'DOCKERFILE'
+    | 'ENV_EXAMPLE';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  requiresReview: boolean;
+  line?: number;
+}
 export interface AnalysisKubernetesEvidence {
   containerPort: number | null;
   servicePort: number | null;
@@ -50,8 +61,9 @@ export interface AnalysisKubernetesEvidence {
       memory: string | null;
     };
   } | null;
-  manifestPaths: string[];
+    manifestPaths: string[];
   requiresReview: boolean;
+  portEvidence?: AnalysisPortEvidence;
 }
 
 export interface AnalysisComponent {
@@ -162,7 +174,40 @@ const kubernetesResourcesSchema = new Schema(
   },
   { _id: false },
 );
-
+const portEvidenceSchema = new Schema<AnalysisPortEvidence>(
+  {
+    sourceFile: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    origin: {
+      type: String,
+      required: true,
+      enum: [
+        'KUBERNETES_MANIFEST',
+        'SOURCE_CODE',
+        'FRAMEWORK_CONFIG',
+        'DOCKERFILE',
+        'ENV_EXAMPLE',
+      ],
+    },
+    confidence: {
+      type: String,
+      required: true,
+      enum: ['HIGH', 'MEDIUM', 'LOW'],
+    },
+    requiresReview: {
+      type: Boolean,
+      required: true,
+    },
+    line: {
+      type: Number,
+      min: 1,
+    },
+  },
+  { _id: false },
+);
 const kubernetesEvidenceSchema =
   new Schema<AnalysisKubernetesEvidence>(
     {
@@ -190,9 +235,13 @@ const kubernetesEvidenceSchema =
         type: [String],
         default: [],
       },
-      requiresReview: {
+            requiresReview: {
         type: Boolean,
         required: true,
+      },
+      portEvidence: {
+        type: portEvidenceSchema,
+        default: undefined,
       },
     },
     { _id: false },

@@ -1,14 +1,31 @@
+
 import { Types } from 'mongoose';
 
-import { InvariantViolationError, NotFoundError } from '../../domain/errors/index.js';
-import type { AnalysisDocument, RecommendationDocument } from '../../models/entities/index.js';
+import {
+  InvariantViolationError,
+  NotFoundError,
+} from '../../domain/errors/index.js';
+
+import type {
+  AnalysisDocument,
+  RecommendationDocument,
+} from '../../models/entities/index.js';
+
 import type { AnalysisRepository } from '../../repositories/analysis.repository.js';
 import type { AuditLogRepository } from '../../repositories/audit-log.repository.js';
+
 import type {
   RecommendationInput,
   RecommendationRepository,
 } from '../../repositories/recommendation.repository.js';
-import { RULES_GENERATED_BY, runAuditRules, type AuditContext } from './audit-rules.js';
+
+import {
+  RULES_GENERATED_BY,
+  runAuditRules,
+  type AuditContext,
+} from './audit-rules.js';
+
+import { isEquivalentAuditRecommendation } from './recommendation-identity.js';
 import type { AiRecommendationsBody } from './recommendation.schema.js';
 
 interface NewRecommendation {
@@ -19,7 +36,10 @@ interface NewRecommendation {
   componentName?: string | undefined;
   suggestedValue?: string | undefined;
   confidence?: number | undefined;
-  proposedFile?: { path: string; content: string } | undefined;
+  proposedFile?: {
+    path: string;
+    content: string;
+  } | undefined;
 }
 
 interface Origin {
@@ -29,10 +49,17 @@ interface Origin {
 
 export interface RecordedRecommendations {
   created: number;
+  updated: number;
   skipped: number;
 }
 
-const keyOf = (item: { type: string; title: string; componentName?: string | undefined }): string =>
+const keyOf = (
+  item: {
+    type: string;
+    title: string;
+    componentName?: string | undefined;
+  },
+): string =>
   `${item.type}|${item.componentName ?? ''}|${item.title}`;
 
 const toInput = (
@@ -41,18 +68,31 @@ const toInput = (
   proposal: NewRecommendation,
 ): RecommendationInput => ({
   analysisId,
-  generatedBy: { provider: origin.provider, model: origin.model },
+  generatedBy: {
+    provider: origin.provider,
+    model: origin.model,
+  },
   type: proposal.type,
   severity: proposal.severity,
   title: proposal.title,
   description: proposal.description,
-  ...(proposal.componentName !== undefined ? { componentName: proposal.componentName } : {}),
-  ...(proposal.suggestedValue !== undefined ? { suggestedValue: proposal.suggestedValue } : {}),
-  ...(proposal.confidence !== undefined ? { confidence: proposal.confidence } : {}),
-  ...(proposal.proposedFile !== undefined ? { proposedFile: proposal.proposedFile } : {}),
+  ...(proposal.componentName !== undefined
+    ? { componentName: proposal.componentName }
+    : {}),
+  ...(proposal.suggestedValue !== undefined
+    ? { suggestedValue: proposal.suggestedValue }
+    : {}),
+  ...(proposal.confidence !== undefined
+    ? { confidence: proposal.confidence }
+    : {}),
+  ...(proposal.proposedFile !== undefined
+    ? { proposedFile: proposal.proposedFile }
+    : {}),
 });
 
-function toAuditContext(analysis: AnalysisDocument): AuditContext {
+function toAuditContext(
+  analysis: AnalysisDocument,
+): AuditContext {
   return {
     detectedFiles: [...analysis.detectedFiles],
     docker: {
@@ -78,7 +118,11 @@ export function createRecommendationService(
     projectId: string,
     analysisId: string,
   ): Promise<AnalysisDocument> {
-    const analysis = await analyses.findOneForOwner(analysisId, projectId, userId);
+    const analysis = await analyses.findOneForOwner(
+      analysisId,
+      projectId,
+      userId,
+    );
 
     if (!analysis) {
       throw new NotFoundError('Analysis not found');
@@ -91,7 +135,11 @@ export function createRecommendationService(
     analysis: AnalysisDocument,
     recommendationId: string,
   ): Promise<RecommendationDocument> {
-    const recommendation = await recommendations.findForAnalysis(recommendationId, analysis._id);
+    const recommendation =
+      await recommendations.findForAnalysis(
+        recommendationId,
+        analysis._id,
+      );
 
     if (!recommendation) {
       throw new NotFoundError('Recommendation not found');
@@ -105,76 +153,224 @@ export function createRecommendationService(
     origin: Origin,
     proposals: readonly NewRecommendation[],
   ): Promise<RecordedRecommendations> {
-    const existing = await recommendations.listByAnalysis(analysis._id);
-    const known = new Set(existing.map((item) => keyOf(item)));
-    const fresh = proposals.filter((proposal) => {
-      const key = keyOf(proposal);
-      if (known.has(key)) {
-        return false;
-      }
-      known.add(key);
+    const existing =
+      await recommendations.listByAnalysis(analysis._id);
 
-      return true;
-    });
-
-    await Promise.all(
-      fresh.map((proposal) => recommendations.record(toInput(analysis._id, origin, proposal))),
+    const known = new Set(
+      existing.map((item) => keyOf(item)),
     );
 
-    return { created: fresh.length, skipped: proposals.length - fresh.length };
+    const fresh: NewRecommendation[] = [];
+    let skipped = 0;
+
+    for (const proposal of proposals) {
+      const key = keyOf(proposal);
+
+      if (known.has(key)) {
+        skipped++;
+        continue;
+      }
+
+      const alreadyEnriched = existing.some((item) =>
+        isEquivalentAuditRecommendation(
+          proposal,
+          item,
+          analysis.components,
+        ),
+      );
+
+      const alreadyProposed = fresh.some((item) =>
+        isEquivalentAuditRecommendation(
+          proposal,
+          item,
+          analysis.components,
+        ),
+      );
+
+      if (alreadyEnriched || alreadyProposed) {
+        skipped++;
+        continue;
+      }
+
+      known.add(key);
+      fresh.push(proposal);
+    }
+
+    let created = 0;
+
+    for (const proposal of fresh) {
+      await recommendations.record(
+        toInput(analysis._id, origin, proposal),
+      );
+
+      created++;
+    }
+
+    return {
+      created,
+      updated: 0,
+      skipped,
+    };
   }
 
-  async function generateForAnalysis(analysis: AnalysisDocument): Promise<number> {
-    const { created } = await createFresh(
-      analysis,
-      RULES_GENERATED_BY,
-      runAuditRules(toAuditContext(analysis)),
+  async function reconcileAiRecommendations(
+    analysis: AnalysisDocument,
+    origin: Origin,
+    proposals: readonly NewRecommendation[],
+  ): Promise<RecordedRecommendations> {
+    const existing =
+      await recommendations.listByAnalysis(analysis._id);
+
+    const known = new Set(
+      existing.map((item) => keyOf(item)),
     );
 
-    return created;
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    for (const proposal of proposals) {
+      const key = keyOf(proposal);
+
+      if (known.has(key)) {
+        skipped++;
+        continue;
+      }
+
+      const related = existing.find((item) =>
+        isEquivalentAuditRecommendation(
+          item,
+          proposal,
+          analysis.components,
+        ),
+      );
+
+      if (related?.status === 'PENDING') {
+        await related.enrichFromAi(
+          toInput(analysis._id, origin, proposal),
+        );
+
+        known.add(key);
+        updated++;
+        continue;
+      }
+
+      if (
+        related !== undefined &&
+        proposal.proposedFile === undefined
+      ) {
+        skipped++;
+        continue;
+      }
+
+      const recorded = await recommendations.record(
+        toInput(analysis._id, origin, proposal),
+      );
+
+      existing.push(recorded);
+      known.add(key);
+      created++;
+    }
+
+    return {
+      created,
+      updated,
+      skipped,
+    };
+  }
+
+  async function generateForAnalysis(
+    analysis: AnalysisDocument,
+  ): Promise<number> {
+    const proposals = runAuditRules(
+      toAuditContext(analysis),
+    );
+
+    const result = await createFresh(
+      analysis,
+      RULES_GENERATED_BY,
+      proposals,
+    );
+
+    return result.created;
   }
 
   async function recordAiRecommendations(
     analysisId: string,
     input: AiRecommendationsBody,
   ): Promise<RecordedRecommendations> {
-    const analysis = await analyses.findForWorkflow(analysisId);
+    const analysis = await analyses.findForWorkflow(
+      analysisId,
+    );
 
     if (!analysis) {
       throw new NotFoundError('Analysis not found');
     }
 
     if (analysis.status !== 'COMPLETED') {
-      throw new InvariantViolationError('Only a completed analysis can receive recommendations');
+      throw new InvariantViolationError(
+        'Only a completed analysis can receive recommendations',
+      );
     }
 
-    const result = await createFresh(
+    const result = await reconcileAiRecommendations(
       analysis,
-      { provider: input.provider, model: input.model },
+      {
+        provider: input.provider,
+        model: input.model,
+      },
       input.recommendations,
     );
 
     await audit.record({
       action: 'RECOMMENDATIONS_GENERATED',
-      entity: { type: 'Analysis', id: analysis._id },
-      message: `${result.created} recommendation(s) from ${input.provider}/${input.model}`,
-      metadata: { provider: input.provider, model: input.model, ...result },
+      entity: {
+        type: 'Analysis',
+        id: analysis._id,
+      },
+      message:
+        `${result.created} created, ` +
+        `${result.updated} enriched recommendation(s) ` +
+        `from ${input.provider}/${input.model}`,
+      metadata: {
+        provider: input.provider,
+        model: input.model,
+        ...result,
+      },
     });
 
     return result;
   }
 
-  async function runAudit(userId: string, projectId: string, analysisId: string) {
-    const analysis = await findOwnedAnalysis(userId, projectId, analysisId);
+  async function runAudit(
+    userId: string,
+    projectId: string,
+    analysisId: string,
+  ) {
+    const analysis = await findOwnedAnalysis(
+      userId,
+      projectId,
+      analysisId,
+    );
 
     if (analysis.status !== 'COMPLETED') {
-      throw new InvariantViolationError('Only a completed analysis can be audited');
+      throw new InvariantViolationError(
+        'Only a completed analysis can be audited',
+      );
     }
 
-    const created = await generateForAnalysis(analysis);
-    const items = await recommendations.listByAnalysis(analysis._id);
+    const created = await generateForAnalysis(
+      analysis,
+    );
 
-    return { created, items };
+    const items = await recommendations.listByAnalysis(
+      analysis._id,
+    );
+
+    return {
+      created,
+      items,
+    };
   }
 
   async function list(
@@ -182,9 +378,15 @@ export function createRecommendationService(
     projectId: string,
     analysisId: string,
   ): Promise<RecommendationDocument[]> {
-    const analysis = await findOwnedAnalysis(userId, projectId, analysisId);
+    const analysis = await findOwnedAnalysis(
+      userId,
+      projectId,
+      analysisId,
+    );
 
-    return recommendations.listByAnalysis(analysis._id);
+    return recommendations.listByAnalysis(
+      analysis._id,
+    );
   }
 
   async function accept(
@@ -193,17 +395,32 @@ export function createRecommendationService(
     analysisId: string,
     recommendationId: string,
   ): Promise<RecommendationDocument> {
-    const analysis = await findOwnedAnalysis(userId, projectId, analysisId);
-    const recommendation = await findRecommendation(analysis, recommendationId);
+    const analysis = await findOwnedAnalysis(
+      userId,
+      projectId,
+      analysisId,
+    );
+
+    const recommendation = await findRecommendation(
+      analysis,
+      recommendationId,
+    );
+
     const actor = new Types.ObjectId(userId);
+
     const decided = await recommendation.accept(actor);
 
     await audit.record({
       actor,
       action: 'RECOMMENDATION_ACCEPTED',
-      entity: { type: 'Recommendation', id: decided._id },
+      entity: {
+        type: 'Recommendation',
+        id: decided._id,
+      },
       message: decided.title,
-      metadata: { analysisId: String(analysis._id) },
+      metadata: {
+        analysisId: String(analysis._id),
+      },
     });
 
     return decided;
@@ -216,15 +433,31 @@ export function createRecommendationService(
     recommendationId: string,
     note?: string,
   ): Promise<RecommendationDocument> {
-    const analysis = await findOwnedAnalysis(userId, projectId, analysisId);
-    const recommendation = await findRecommendation(analysis, recommendationId);
+    const analysis = await findOwnedAnalysis(
+      userId,
+      projectId,
+      analysisId,
+    );
+
+    const recommendation = await findRecommendation(
+      analysis,
+      recommendationId,
+    );
+
     const actor = new Types.ObjectId(userId);
-    const decided = await recommendation.reject(actor, note);
+
+    const decided = await recommendation.reject(
+      actor,
+      note,
+    );
 
     await audit.record({
       actor,
       action: 'RECOMMENDATION_REJECTED',
-      entity: { type: 'Recommendation', id: decided._id },
+      entity: {
+        type: 'Recommendation',
+        id: decided._id,
+      },
       message: decided.title,
       metadata: {
         analysisId: String(analysis._id),
@@ -235,7 +468,15 @@ export function createRecommendationService(
     return decided;
   }
 
-  return { generateForAnalysis, recordAiRecommendations, runAudit, list, accept, reject };
+  return {
+    generateForAnalysis,
+    recordAiRecommendations,
+    runAudit,
+    list,
+    accept,
+    reject,
+  };
 }
 
-export type RecommendationService = ReturnType<typeof createRecommendationService>;
+export type RecommendationService =
+  ReturnType<typeof createRecommendationService>;

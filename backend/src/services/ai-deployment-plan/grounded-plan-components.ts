@@ -80,10 +80,7 @@ export function groundPlanComponents(
       ...component,
       containerPort:
         source.containerPort ?? component.containerPort,
-      image:
-        hasDeployableImage && source.image
-          ? source.image
-          : component.image,
+        image: source.image ?? component.image,
       resources: hasResources
         ? {
             requests: {

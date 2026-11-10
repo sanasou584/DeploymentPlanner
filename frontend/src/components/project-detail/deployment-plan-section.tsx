@@ -63,29 +63,35 @@ function buildInitialComponents(
     return [];
   }
 
-  return analysis.components.map((component) => ({
-    name: component.name,
-    type: component.type as PlanComponentType,
-    containerPort: 0,
-    replicas: 1,
-    resources: {
-      requests: {
-        cpu: "",
-        memory: "",
+  return analysis.components.map((component) => {
+    const evidence = component.kubernetes;
+    const resources = evidence?.resources;
+
+    return {
+      name: component.name,
+      type: component.type as PlanComponentType,
+      containerPort: evidence?.containerPort ?? 0,
+      image: evidence?.image ?? undefined,
+      replicas: 1,
+      resources: {
+        requests: {
+          cpu: resources?.requests.cpu ?? "",
+          memory: resources?.requests.memory ?? "",
+        },
+        limits: {
+          cpu: resources?.limits.cpu ?? "",
+          memory: resources?.limits.memory ?? "",
+        },
       },
-      limits: {
-        cpu: "",
-        memory: "",
+      hpa: {
+        enabled: false,
       },
-    },
-    hpa: {
-      enabled: false,
-    },
-    ingress: {
-      enabled: false,
-      tls: false,
-    },
-  }));
+      ingress: {
+        enabled: false,
+        tls: false,
+      },
+    };
+  });
 }
 
 function isComponentValid(component: PlanComponent): boolean {

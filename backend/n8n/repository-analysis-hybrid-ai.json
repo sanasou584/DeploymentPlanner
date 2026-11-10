@@ -11,8 +11,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.2,
       "position": [
-        -224,
-        48
+        -400,
+        304
       ],
       "id": "55a8140f-1797-4a6e-b76d-b2a4fcb93f16",
       "name": "Webhook",
@@ -35,8 +35,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        -80,
-        384
+        -224,
+        304
       ],
       "id": "aceba729-ae7a-4caa-9546-bdb52e1629c4",
       "name": "start",
@@ -56,8 +56,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        96,
-        256
+        -48,
+        240
       ],
       "id": "976de57b-420d-41ed-bf34-c507d5972436",
       "name": "branch",
@@ -72,8 +72,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        256,
-        64
+        112,
+        128
       ],
       "id": "0b68c6c5-ff0a-4472-8519-f87e4037af18",
       "name": "tree",
@@ -81,13 +81,13 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst input = $input.first().json;\n\nif (!Array.isArray(input.tree)) {\n  throw new Error(\"GitHub tree is missing\");\n}\n\nif (input.truncated === true) {\n  throw new Error(\"GitHub tree is truncated\");\n}\n\nconst rules = [\n  /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i,\n  /^kubernetes-manifests\\/.*\\.ya?ml$/i,\n  /^kustomize\\/base\\/.*\\.ya?ml$/i,\n  /^skaffold\\.ya?ml$/i,\n  /(^|\\/)(docker-compose|compose)\\.ya?ml$/i,\n  /(^|\\/)(package\\.json|go\\.mod|pom\\.xml|build\\.gradle|settings\\.gradle|requirements\\.txt|pyproject\\.toml)$/i,\n  /(^|\\/)[^/]+\\.csproj$/i,\n  /^helm-chart\\/values\\.yaml$/i,\n];\n\nconst treePaths = input.tree\n  .filter(entry => entry.type === \"blob\")\n  .map(entry => entry.path);\n\nconst selectedPaths = [...new Set(\n  treePaths.filter(path =>\n    rules.some(rule => rule.test(path))\n  )\n)].sort();\n\nconst files = selectedPaths.map(path => ({ path }));\n\nconst required = [\n  \"src/cartservice/src/Dockerfile\",\n  \"kubernetes-manifests/frontend.yaml\",\n  \"skaffold.yaml\",\n];\n\nconst missing = required.filter(\n  path => !selectedPaths.includes(path)\n);\n\nreturn [{\n  json: {\n    codeVersion: \"FILTER_V3\",\n    commitSha: input.sha,\n    truncated: input.truncated,\n    treePaths,\n    files,\n    completeBody: {\n      detectedFiles: selectedPaths,\n      technologies: [],\n      components: [],\n      docker: {\n        hasDockerfile: selectedPaths.some(\n          path => /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i.test(path)\n        ),\n        hasCompose: selectedPaths.some(\n          path => /(^|\\/)(docker-compose|compose)\\.ya?ml$/i.test(path)\n        ),\n        findings: [],\n      },\n    },\n    diagnostic: {\n      selectedCount: files.length,\n      missingFiles: missing,\n      validationPassed: missing.length === 0,\n    },\n  },\n}];\n"
+        "jsCode": "\nconst input = $input.first().json;\n\nif (!Array.isArray(input.tree)) {\n  throw new Error(\"GitHub tree is missing\");\n}\n\nif (input.truncated === true) {\n  throw new Error(\"GitHub tree is truncated\");\n}\n\nconst rules = [\n  /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i,\n  /^kubernetes-manifests\\/.*\\.ya?ml$/i,\n  /^kustomize\\/base\\/.*\\.ya?ml$/i,\n  /^skaffold\\.ya?ml$/i,\n  /(^|\\/)(docker-compose|compose)\\.ya?ml$/i,\n  /(^|\\/)(package\\.json|go\\.mod|pom\\.xml|build\\.gradle|settings\\.gradle|requirements\\.txt|pyproject\\.toml)$/i,\n  /(^|\\/)[^/]+\\.csproj$/i,\n  /^helm-chart\\/values\\.yaml$/i,\n];\n\nconst treePaths = input.tree\n  .filter(entry => entry.type === \"blob\")\n  .map(entry => entry.path);\n\nconst selectedPaths = [...new Set(\n  treePaths.filter(path =>\n    rules.some(rule => rule.test(path))\n  )\n)].sort();\n\nconst files = selectedPaths.map(path => ({ path }));\n\nconst required = [];\n\nconst missing = required.filter(\n  path => !selectedPaths.includes(path)\n);\n\nreturn [{\n  json: {\n    codeVersion: \"FILTER_V3\",\n    commitSha: input.sha,\n    truncated: input.truncated,\n    treePaths,\n    files,\n    completeBody: {\n      detectedFiles: selectedPaths,\n      technologies: [],\n      components: [],\n      docker: {\n        hasDockerfile: selectedPaths.some(\n          path => /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i.test(path)\n        ),\n        hasCompose: selectedPaths.some(\n          path => /(^|\\/)(docker-compose|compose)\\.ya?ml$/i.test(path)\n        ),\n        findings: [],\n      },\n    },\n    diagnostic: {\n      selectedCount: files.length,\n      missingFiles: missing,\n      validationPassed: missing.length === 0,\n    },\n  },\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
-        80
+        272,
+        96
       ],
       "id": "dc154126-147a-4b19-96c8-dcc854033d04",
       "name": "filter",
@@ -107,8 +107,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        3568,
-        352
+        3184,
+        -368
       ],
       "id": "a452fe0c-bb59-4a66-bb06-78e77101d545",
       "name": "complete",
@@ -134,8 +134,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        3568,
-        1024
+        2928,
+        -176
       ],
       "id": "4edff876-49af-4d60-93ef-f5795785547e",
       "name": "fail",
@@ -155,8 +155,8 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1.1,
       "position": [
-        944,
-        -160
+        608,
+        -96
       ],
       "id": "d00d0430-a695-4c0b-b213-4618300e873d",
       "name": "split-files",
@@ -177,8 +177,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        1120,
-        -256
+        752,
+        -192
       ],
       "id": "1abbdf1e-4349-47db-8ffc-f2ab99416f18",
       "name": "fetch-file-content",
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        1632,
-        -384
+        1184,
+        -288
       ],
       "id": "3a48c524-fb33-4c1e-824a-8c6a7f0fa9fb",
       "name": "aggregate-files",
@@ -207,8 +207,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1344,
-        -336
+        960,
+        -240
       ],
       "id": "5496d072-5834-4d6e-acec-d921d60393c1",
       "name": "prepare-file",
@@ -221,8 +221,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1952,
-        -480
+        1376,
+        -352
       ],
       "id": "9ca073b7-8d08-4221-accc-4d7eac16ff3d",
       "name": "analyse-files",
@@ -256,8 +256,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.4,
       "position": [
-        704,
-        -32
+        432,
+        0
       ],
       "id": "d8d7ab9c-6538-4c45-b4fa-28cc532a8912",
       "name": "has-files"
@@ -269,8 +269,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2464,
-        128
+        1904,
+        -384
       ],
       "id": "921514a1-7e93-4261-aefe-a8b323e38c45",
       "name": "detect-complexity",
@@ -304,8 +304,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.4,
       "position": [
-        2688,
-        128
+        2080,
+        -464
       ],
       "id": "879bbae7-f284-4f15-9a38-be6e994d5b61",
       "name": "needs-ai"
@@ -317,8 +317,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2880,
-        0
+        2304,
+        -512
       ],
       "id": "6796d1f3-b387-4145-b6bb-610945fd5e19",
       "name": "prepare-ai-context",
@@ -338,8 +338,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        3104,
-        0
+        2528,
+        -544
       ],
       "id": "065e6e7d-4ee8-44c4-a0bf-b0e1d7a68b7a",
       "name": "ai-stack-analyzer",
@@ -358,8 +358,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3328,
-        0
+        2672,
+        -544
       ],
       "id": "1c2dccb6-efc2-459b-9d37-aedeb436003e",
       "name": "validate-and-merge",
@@ -367,13 +367,13 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst input = $input.first().json;\n\nconst body = input.completeBody;\n\nif (!body || !Array.isArray(body.detectedFiles)) {\n  throw new Error(\n    \"Missing completeBody.detectedFiles from analyze-files\"\n  );\n}\n\nconst dockerfiles = body.detectedFiles.filter(\n  path =>\n    /^src\\/[^/]+\\/(?:[^/]+\\/)*Dockerfile$/i.test(path)\n);\n\nconst serviceRoots = new Map();\n\nfor (const path of dockerfiles) {\n  const segments = path.split(\"/\");\n\n  const serviceName = segments[1];\n  const rootPath = segments.slice(0, -1).join(\"/\");\n\n  if (!serviceRoots.has(serviceName)) {\n    serviceRoots.set(serviceName, rootPath);\n  }\n}\n\nconst existing = Array.isArray(body.components)\n  ? body.components\n  : [];\n\nconst components = [...serviceRoots.entries()].map(\n  ([name, rootPath]) => {\n    const match = existing.find(component =>\n      component.rootPath === rootPath\n    );\n\n    return {\n      name,\n      type:\n        name === \"frontend\"\n          ? \"FRONTEND\"\n          : name === \"loadgenerator\"\n            ? \"WORKER\"\n            : match?.type ?? \"BACKEND\",\n      rootPath,\n    };\n  }\n);\n\nconst missing = dockerfiles\n  .map(path => path.slice(0, path.lastIndexOf(\"/\")))\n  .filter(root => !components.some(\n    component => component.rootPath === root\n  ));\n\nif (missing.length > 0) {\n  throw new Error(\n    `Missing Docker components: ${missing.join(\", \")}`\n  );\n}\n\nreturn [{\n  json: {\n    ...input,\n    completeBody: {\n      ...body,\n      components,\n    },\n    componentDiagnostics: {\n      version: \"COMPONENT_FIX_V1\",\n      dockerfileCount: dockerfiles.length,\n      componentCount: components.length,\n      missingDockerRoots: missing,\n      componentNames: components.map(\n        component => component.name\n      ),\n    },\n  },\n}];\n"
+        "jsCode": "\nconst input = $input.first().json;\n\nconst body = input.completeBody;\n\nif (\n  !body ||\n  typeof body !== \"object\" ||\n  !Array.isArray(body.detectedFiles)\n) {\n  throw new Error(\n    \"Missing completeBody.detectedFiles\"\n  );\n}\n\nconst detectedFiles = body.detectedFiles;\n\nconst existing = Array.isArray(body.components)\n  ? body.components\n  : [];\n\nconst components = [];\nconst names = new Set();\nconst roots = new Set();\n\nfunction addComponent(candidate) {\n  if (\n    !candidate ||\n    typeof candidate.name !== \"string\" ||\n    typeof candidate.rootPath !== \"string\" ||\n    typeof candidate.type !== \"string\"\n  ) {\n    return;\n  }\n\n  const name = candidate.name.trim();\n  const rootPath = candidate.rootPath.trim();\n  const type = candidate.type;\n\n  const allowedTypes = new Set([\n    \"FRONTEND\",\n    \"BACKEND\",\n    \"DATABASE\",\n    \"WORKER\",\n    \"OTHER\",\n  ]);\n\n  if (\n    !name ||\n    !rootPath ||\n    !allowedTypes.has(type)\n  ) {\n    return;\n  }\n\n  const normalizedName = name.toLowerCase();\n  const normalizedRoot = rootPath.toLowerCase();\n\n  if (\n    names.has(normalizedName) ||\n    roots.has(normalizedRoot)\n  ) {\n    return;\n  }\n\n  names.add(normalizedName);\n  roots.add(normalizedRoot);\n\n  components.push({\n    ...candidate,\n    name,\n    type,\n    rootPath,\n  });\n}\n\nfor (const component of existing) {\n  addComponent(component);\n}\n\nconst dockerfilePattern =\n  /^(?:src\\/[^/]+(?:\\/[^/]+)*|backend|frontend|services\\/[^/]+)\\/Dockerfile$/i;\n\nconst dockerfiles = detectedFiles.filter(\n  path => dockerfilePattern.test(path)\n);\n\nfunction inferType(name) {\n  const normalized = name.toLowerCase();\n\n  if (normalized === \"frontend\") {\n    return \"FRONTEND\";\n  }\n\n  if (normalized === \"loadgenerator\") {\n    return \"WORKER\";\n  }\n\n  return \"BACKEND\";\n}\n\nfor (const path of dockerfiles) {\n  const segments = path.split(\"/\");\n  const rootPath = segments.slice(0, -1).join(\"/\");\n\n  const serviceName =\n    segments[0] === \"src\"\n      ? segments[1]\n      : segments[0] === \"services\"\n        ? segments[1]\n        : segments[0];\n\n  if (!serviceName) {\n    continue;\n  }\n\n  const existingRoot = components.find(\n    component =>\n      component.rootPath.toLowerCase() ===\n      rootPath.toLowerCase()\n  );\n\n  if (existingRoot) {\n    continue;\n  }\n\n  addComponent({\n    name: serviceName,\n    type: inferType(serviceName),\n    rootPath,\n  });\n}\n\nconst packageRoots = [\n  {\n    file: \"backend/package.json\",\n    name: \"backend\",\n    type: \"BACKEND\",\n    rootPath: \"backend\",\n  },\n  {\n    file: \"frontend/package.json\",\n    name: \"frontend\",\n    type: \"FRONTEND\",\n    rootPath: \"frontend\",\n  },\n];\n\nfor (const candidate of packageRoots) {\n  if (detectedFiles.includes(candidate.file)) {\n    addComponent(candidate);\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n\n      completeBody: {\n        ...body,\n        components,\n      },\n\n      componentDiagnostics: {\n        version: \"COMPONENT_FIX_V2\",\n        detectedFileCount: detectedFiles.length,\n        dockerfileCount: dockerfiles.length,\n        preservedComponentCount: existing.length,\n        componentCount: components.length,\n        componentNames: components.map(\n          component => component.name\n        ),\n        components: components.map(component => ({\n          name: component.name,\n          type: component.type,\n          rootPath: component.rootPath,\n        })),\n      },\n    },\n  },\n];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
-        -704
+        1584,
+        -416
       ],
       "id": "4bec0317-6a39-41c8-a51d-95e50aea4b8c",
       "name": "ensure-components"
@@ -385,8 +385,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2352,
-        -224
+        1760,
+        -400
       ],
       "id": "cb502880-4d4a-44e7-8cfc-c2474daad194",
       "name": "extract-kubernetes-evidence"
@@ -695,7 +695,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "b094d5d7-69be-486c-9d03-7e7b6f07cce7",
+  "versionId": "727830df-a907-43ef-9771-34e32d8bac32",
   "meta": {
     "instanceId": "f683f101dac82048bec3ff9b0a38913feeb98ca30a691f57ea4a4bfcad7141a6"
   },

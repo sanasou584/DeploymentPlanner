@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 import {
@@ -5,7 +6,10 @@ import {
   DOCKER_FINDING_SEVERITIES,
   TECHNOLOGY_CATEGORIES,
 } from '../../domain/enums/analysis.enums.js';
-import { hexIdSchema } from '../../shared/validation/request-validation.js';
+
+import {
+  hexIdSchema,
+} from '../../shared/validation/request-validation.js';
 
 export const projectAnalysesParamsSchema = z.strictObject({
   projectId: hexIdSchema,
@@ -32,10 +36,54 @@ const technologySchema = z.strictObject({
   sourceFile: z.string().trim().min(1).optional(),
 });
 
+const kubernetesQuantitySchema = z.strictObject({
+  cpu: z.string().trim().min(1).nullable(),
+  memory: z.string().trim().min(1).nullable(),
+});
+
+const kubernetesResourcesSchema = z.strictObject({
+  requests: kubernetesQuantitySchema,
+  limits: kubernetesQuantitySchema,
+});
+
+const kubernetesEvidenceSchema = z.strictObject({
+  containerPort: z
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .nullable(),
+
+  servicePort: z
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .nullable(),
+
+  targetPort: z
+    .union([
+      z.number().int().min(1).max(65535),
+      z.string().trim().min(1),
+    ])
+    .nullable(),
+
+  image: z.string().trim().min(1).nullable(),
+
+  resources: kubernetesResourcesSchema.nullable(),
+
+  manifestPaths: z
+    .array(z.string().trim().min(1))
+    .max(100),
+
+  requiresReview: z.boolean(),
+});
+
 const componentSchema = z.strictObject({
   name: z.string().trim().min(1),
   type: z.enum(ANALYZED_COMPONENT_TYPES),
   rootPath: z.string().trim().min(1),
+  kubernetes: kubernetesEvidenceSchema.optional(),
 });
 
 const dockerFindingSchema = z.strictObject({
@@ -53,9 +101,21 @@ const dockerSchema = z.strictObject({
 });
 
 export const completeAnalysisBodySchema = z.strictObject({
-  detectedFiles: z.array(z.string().trim().min(1)).max(500).optional(),
-  technologies: z.array(technologySchema).max(200).optional(),
-  components: z.array(componentSchema).max(100).optional(),
+  detectedFiles: z
+    .array(z.string().trim().min(1))
+    .max(500)
+    .optional(),
+
+  technologies: z
+    .array(technologySchema)
+    .max(200)
+    .optional(),
+
+  components: z
+    .array(componentSchema)
+    .max(100)
+    .optional(),
+
   docker: dockerSchema.optional(),
 });
 
@@ -64,6 +124,14 @@ export const failAnalysisBodySchema = z.strictObject({
   message: z.string().trim().min(1).max(1000),
 });
 
-export type ListAnalysesQuery = z.infer<typeof listAnalysesQuerySchema>;
-export type CompleteAnalysisBody = z.infer<typeof completeAnalysisBodySchema>;
-export type FailAnalysisBody = z.infer<typeof failAnalysisBodySchema>;
+export type ListAnalysesQuery = z.infer<
+  typeof listAnalysesQuerySchema
+>;
+
+export type CompleteAnalysisBody = z.infer<
+  typeof completeAnalysisBodySchema
+>;
+
+export type FailAnalysisBody = z.infer<
+  typeof failAnalysisBodySchema
+>;

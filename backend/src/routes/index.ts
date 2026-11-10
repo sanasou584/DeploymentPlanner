@@ -193,13 +193,6 @@ export function createApiRouter(): Router {
     requireAuth,
   ),
 );
-router.use(
-  '/projects',
-  createDeploymentPlanRouter(
-    deploymentPlanService,
-    requireAuth,
-  ),
-);
 
 router.use(
   '/projects',

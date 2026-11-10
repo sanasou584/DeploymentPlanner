@@ -40,20 +40,53 @@ interface AiAssumptions {
 }
 
 function getApiError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return "An unexpected error occurred.";
+  }
+
   const response = error as {
     data?: {
       error?: {
         message?: string;
+        details?: {
+          fieldErrors?: Record<string, string[]>;
+          formErrors?: string[];
+        };
       };
+      message?: string;
     };
+    error?: string;
     message?: string;
   };
 
-  return (
-    response.data?.error?.message ??
-    response.message ??
-    "An unexpected error occurred."
+  const apiError = response.data?.error;
+  const details = apiError?.details;
+
+  const fieldMessages = Object.entries(
+    details?.fieldErrors ?? {},
+  ).flatMap(([field, messages]) =>
+    messages.map((message) => `${field}: ${message}`),
   );
+
+  const allMessages = [
+    ...fieldMessages,
+    ...(details?.formErrors ?? []),
+  ];
+
+  const mainMessage =
+    apiError?.message ??
+    response.data?.message ??
+    response.message ??
+    response.error ??
+    "An unexpected error occurred.";
+
+  return allMessages.length > 0
+    ? `${mainMessage}: ${allMessages.join("; ")}`
+    : mainMessage;
 }
 
 
@@ -107,15 +140,19 @@ function buildInitialComponents(
 }
 
 
-function isComponentValid(
-  component: PlanComponent,
-  requireImage = false,
-): boolean {
+const PLACEHOLDER_IMAGE_PATTERNS = [
+  /(^|[/:._-])example([/:._-]|$)/i,
+  /(^|[/:._-])placeholder([/:._-]|$)/i,
+  /(^|[/:._-])changeme([/:._-]|$)/i,
+  /(^|[/:._-])your-registry([/:._-]|$)/i,
+  /^<.*>$/,
+];
+
+function isComponentValid(component: PlanComponent): boolean {
   const { resources, hpa, ingress } = component;
 
-    const validPort =
-    (component.type === "WORKER" &&
-      component.containerPort === null) ||
+  const validPort =
+    (component.type === "WORKER" && component.containerPort === null) ||
     (component.containerPort !== null &&
       Number.isInteger(component.containerPort) &&
       component.containerPort >= 1 &&
@@ -130,47 +167,51 @@ function isComponentValid(
     resources.requests.memory,
     resources.limits.cpu,
     resources.limits.memory,
-  ].every((value) => value.trim().length > 0);
+  ].every((value) => typeof value === "string" && value.trim().length > 0);
 
   const validHpa =
     !hpa.enabled ||
-    (
-      Number.isInteger(hpa.minReplicas) &&
+    (Number.isInteger(hpa.minReplicas) &&
       Number.isInteger(hpa.maxReplicas) &&
       (hpa.minReplicas ?? 0) >= 1 &&
       (hpa.maxReplicas ?? 0) >= (hpa.minReplicas ?? 0) &&
       Number.isInteger(hpa.targetCpuUtilizationPercent) &&
       (hpa.targetCpuUtilizationPercent ?? 0) >= 1 &&
       (hpa.targetCpuUtilizationPercent ?? 0) <= 100 &&
-      (
-        hpa.targetMemoryUtilizationPercent === undefined ||
-        (
-          Number.isInteger(hpa.targetMemoryUtilizationPercent) &&
+      (hpa.targetMemoryUtilizationPercent === undefined ||
+        (Number.isInteger(hpa.targetMemoryUtilizationPercent) &&
           hpa.targetMemoryUtilizationPercent >= 1 &&
-          hpa.targetMemoryUtilizationPercent <= 100
-        )
-      )
-    );
+          hpa.targetMemoryUtilizationPercent <= 100)));
 
-  const validIngress =
-    !ingress.enabled ||
-    Boolean(ingress.host?.trim());
+  const validIngress = !ingress.enabled || Boolean(ingress.host?.trim());
 
-      const validImage =
-    !requireImage ||
-    (
-      typeof component.image === "string" &&
-      component.image.trim().length > 0
-    );
+  return validPort && validReplicas && resourcesPresent && validHpa && validIngress;
+}
 
-  return (
-    validImage &&
-    validPort &&
-    validReplicas &&
-    resourcesPresent &&
-    validHpa &&
-    validIngress
-  );
+function getApprovalIssues(components: readonly PlanComponent[]): string[] {
+  return components.flatMap((component) => {
+    const issues: string[] = [];
+
+    if (!isComponentValid(component)) {
+      issues.push(`${component.name}: invalid Kubernetes configuration`);
+    }
+
+    const image = component.image?.trim() ?? "";
+
+    if (!image) {
+      issues.push(`${component.name}: container image is required`);
+    } else {
+      if (PLACEHOLDER_IMAGE_PATTERNS.some((pattern) => pattern.test(image))) {
+        issues.push(`${component.name}: placeholder Docker image is not allowed`);
+      }
+
+      if (/\s/.test(image)) {
+        issues.push(`${component.name}: container image contains whitespace`);
+      }
+    }
+
+    return issues;
+  });
 }
 
 function StatCard({
@@ -261,10 +302,12 @@ export function DeploymentPlanSection({
     rejectMeta.isLoading;
 
   const manualValid =
-  manualComponents.length > 0 &&
-  manualComponents.every(
-    (component) => isComponentValid(component, false),
-  );
+    manualComponents.length > 0 &&
+    manualComponents.every((component) => isComponentValid(component));
+
+  const approvalIssues = selectedPlan
+    ? getApprovalIssues(selectedPlan.components)
+    : [];
 
   const selectedAssumptions =
     aiAssumptions && selectedPlan && aiAssumptions.planId === selectedPlan.id
@@ -413,9 +456,7 @@ export function DeploymentPlanSection({
           containerPort: editedComponent.containerPort,
           servicePort: editedComponent.servicePort ?? null,
           targetPort: editedComponent.targetPort ?? null,
-          ...(editedComponent.image
-            ? { image: editedComponent.image }
-            : {}),
+          image: editedComponent.image?.trim() ?? "",
           replicas: editedComponent.replicas,
           resources: editedComponent.resources,
           hpa: editedComponent.hpa,
@@ -439,20 +480,22 @@ export function DeploymentPlanSection({
     if (
       !selectedPlan ||
       selectedPlan.status !== "DRAFT" ||
-            editingName !== null ||
-            !selectedPlan.components.every(
-  (component) => isComponentValid(component, true),
-) ||
-            isBusy
+      editingName !== null ||
+      approvalIssues.length > 0 ||
+      isBusy
     ) {
       return;
     }
 
     try {
-      await approvePlan({
+      const result = await approvePlan({
         projectId,
         planId: selectedPlan.id,
       }).unwrap();
+
+      if (result.data.status !== "APPROVED") {
+        throw new Error("The server did not confirm plan approval.");
+      }
 
       setShowReject(false);
       setRejectReason("");
@@ -461,7 +504,7 @@ export function DeploymentPlanSection({
       toast.push({
         tone: "mint",
         title: "Deployment plan approved",
-        message: `Deployment Plan v${selectedPlan.version} is ready for Kubernetes manifest generation.`,
+        message: `Deployment Plan v${result.data.version} is ready for Kubernetes manifest generation.`,
       });
     } catch (error) {
       showError(error, "Approval failed");
@@ -891,7 +934,7 @@ export function DeploymentPlanSection({
                   );
                 })}
 
-                                <KubernetesManifestSection
+                <KubernetesManifestSection
                   key={selectedPlan.id}
                   projectId={projectId}
                   planId={selectedPlan.id}
@@ -940,26 +983,37 @@ export function DeploymentPlanSection({
                           disabled={
                             isBusy ||
                             editingName !== null ||
-                            !selectedPlan.components.every(
-                                (component) => isComponentValid(component, true),
-                              )
+                            approvalIssues.length > 0
                           }
-                          onClick={() =>
-                            void handleApprovePlan()
-                          }
+                          onClick={() => void handleApprovePlan()}
                           className="h-10 gap-2 px-5"
                         >
                           <MaterialIcon
-                            name="check_circle"
-                            className="text-[18px]"
+                            name={approveMeta.isLoading ? "progress_activity" : "check_circle"}
+                            className={cn(
+                              "text-[18px]",
+                              approveMeta.isLoading && "animate-spin",
+                            )}
                           />
-
-                          {approveMeta.isLoading
-                            ? "Approving..."
-                            : "Approve plan"}
+                          {approveMeta.isLoading ? "Approving..." : "Approve plan"}
                         </Button>
                       </div>
                     </div>
+
+                    {approvalIssues.length > 0 ? (
+                      <div role="alert" className="mt-5 rounded-xl border border-champagne/40 bg-champagne/10 p-4">
+                        <p className="font-display text-body-sm font-semibold text-champagne">
+                          Deployment plan is not ready for approval.
+                        </p>
+                        <ul className="mt-3 list-disc space-y-1 pl-5">
+                          {approvalIssues.map((issue) => (
+                            <li key={issue} className="font-display text-body-sm text-foam">
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
 
                     {showReject ? (
                       <div className="mt-5 flex flex-col gap-3 border-t border-steel/40 pt-5">

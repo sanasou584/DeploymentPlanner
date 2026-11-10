@@ -243,7 +243,95 @@ describe('deployment plan service', () => {
       ),
     ).rejects.toThrow();
   });
+    it('refuses approval when a container image is missing', async () => {
+    const { user, project, analysis } = await makeFixture();
 
+    const plan = await service.create(
+      user.id,
+      project.id,
+      {
+        analysisId: analysis.id,
+        components: [
+          {
+            ...sampleComponent,
+            image: undefined,
+          },
+        ],
+      },
+    );
+
+    await expect(
+      service.approve(
+        user.id,
+        project.id,
+        plan.id,
+      ),
+    ).rejects.toThrow(
+      /container image is required/,
+    );
+
+    const persisted = await DeploymentPlan.findById(plan.id);
+
+    expect(persisted?.status).toBe('DRAFT');
+    expect(persisted?.review).toBeUndefined();
+  });
+
+  it('refuses approval with a placeholder image', async () => {
+    const { user, project, analysis } = await makeFixture();
+
+    const plan = await service.create(
+      user.id,
+      project.id,
+      {
+        analysisId: analysis.id,
+        components: [
+          {
+            ...sampleComponent,
+            image: 'registry.example.com/api:1.0.0',
+          },
+        ],
+      },
+    );
+
+    await expect(
+      service.approve(
+        user.id,
+        project.id,
+        plan.id,
+      ),
+    ).rejects.toThrow(
+      /placeholder container image is not allowed/,
+    );
+
+    const persisted = await DeploymentPlan.findById(plan.id);
+
+    expect(persisted?.status).toBe('DRAFT');
+  });
+
+  it('refuses approval by a foreign user', async () => {
+    const { user, project, analysis } = await makeFixture();
+
+    const plan = await service.create(
+      user.id,
+      project.id,
+      {
+        analysisId: analysis.id,
+        components: [sampleComponent],
+      },
+    );
+
+    await expect(
+      service.approve(
+        foreignUser,
+        project.id,
+        plan.id,
+      ),
+    ).rejects.toThrow('Project not found');
+
+    const persisted = await DeploymentPlan.findById(plan.id);
+
+    expect(persisted?.status).toBe('DRAFT');
+  });
   it('rejects a plan with a reason and keeps rejection terminal', async () => {
     const { user, project, analysis } = await makeFixture();
 

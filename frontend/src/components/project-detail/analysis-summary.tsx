@@ -8,6 +8,10 @@ import {
   KubernetesEvidenceCard,
 } from "@/components/analysis/kubernetes-evidence-card";
 
+import {
+  DockerfileProposalsSection,
+} from "@/components/project-detail/dockerfile-proposals-section";
+
 const CATEGORY_LABEL: Record<string, string> = {
   LANGUAGE: "Languages",
   FRAMEWORK: "Frameworks",
@@ -95,7 +99,11 @@ export function AnalysisSummary({ analysis }: { analysis: Analysis | null }) {
           <TechnologyGrid technologies={analysis.technologies} />
           <ComponentList components={analysis.components} />
           <KubernetesEvidenceCard components={analysis.components} />
-          <DockerBlock docker={analysis.docker} />
+                    <DockerBlock docker={analysis.docker} />
+          <DockerfileProposalsSection
+            projectId={analysis.project}
+            analysisId={analysis.id}
+          />
           {analysis.detectedFiles.length > 0 ? (
             <div className="flex flex-col gap-2">
               <p className="font-mono text-label-sm uppercase text-cinder">Detected files</p>

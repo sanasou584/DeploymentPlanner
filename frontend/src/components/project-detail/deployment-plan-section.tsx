@@ -107,7 +107,10 @@ function buildInitialComponents(
 }
 
 
-function isComponentValid(component: PlanComponent): boolean {
+function isComponentValid(
+  component: PlanComponent,
+  requireImage = false,
+): boolean {
   const { resources, hpa, ingress } = component;
 
     const validPort =
@@ -153,9 +156,12 @@ function isComponentValid(component: PlanComponent): boolean {
     !ingress.enabled ||
     Boolean(ingress.host?.trim());
 
-    const validImage =
-    typeof component.image === "string" &&
-    component.image.trim().length > 0;
+      const validImage =
+    !requireImage ||
+    (
+      typeof component.image === "string" &&
+      component.image.trim().length > 0
+    );
 
   return (
     validImage &&
@@ -255,8 +261,10 @@ export function DeploymentPlanSection({
     rejectMeta.isLoading;
 
   const manualValid =
-    manualComponents.length > 0 &&
-    manualComponents.every(isComponentValid);
+  manualComponents.length > 0 &&
+  manualComponents.every(
+    (component) => isComponentValid(component, false),
+  );
 
   const selectedAssumptions =
     aiAssumptions && selectedPlan && aiAssumptions.planId === selectedPlan.id
@@ -432,7 +440,9 @@ export function DeploymentPlanSection({
       !selectedPlan ||
       selectedPlan.status !== "DRAFT" ||
             editingName !== null ||
-            !selectedPlan.components.every(isComponentValid) ||
+            !selectedPlan.components.every(
+  (component) => isComponentValid(component, true),
+) ||
             isBusy
     ) {
       return;
@@ -930,7 +940,9 @@ export function DeploymentPlanSection({
                           disabled={
                             isBusy ||
                             editingName !== null ||
-                            !selectedPlan.components.every(isComponentValid)
+                            !selectedPlan.components.every(
+                                (component) => isComponentValid(component, true),
+                              )
                           }
                           onClick={() =>
                             void handleApprovePlan()

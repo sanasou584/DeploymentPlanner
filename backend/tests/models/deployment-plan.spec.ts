@@ -22,6 +22,7 @@ const webComponent = (overrides: Partial<PlanComponent> = {}): PlanComponent => 
   name: 'web',
   type: 'FRONTEND',
   containerPort: 3000,
+  image: 'ghcr.io/acme/web:1.0.0',
   replicas: 3,
   resources: {
     requests: { cpu: '250m', memory: '512Mi' },

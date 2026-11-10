@@ -65,7 +65,9 @@ export async function runSyncIndexes(
   // on a connection that does not exist yet, so init() queues against
   // base.options) and again on the connection config (second level of the
   // lookup), making the run autoIndex-free regardless of NODE_ENV.
+    mongoose.set('autoCreate', false);
   mongoose.set('autoIndex', false);
+
   const entityIndex = (await import('../models/entities/index.js')) as unknown as Record<
     string,
     object

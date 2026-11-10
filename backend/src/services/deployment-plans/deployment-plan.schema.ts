@@ -51,7 +51,7 @@ const componentSchema = z.strictObject({
   containerPort: portSchema.nullable(),
   servicePort: portSchema.nullable().optional(),
   targetPort: targetPortSchema.nullable().optional(),
-  image: z.string().trim().min(1).optional(),
+  image: z.string().trim().optional(),
   replicas: z.number().int().min(1),
   resources: resourcesSchema,
   hpa: hpaSchema,

@@ -24,7 +24,18 @@ export interface AnalysisTechnology {
   category: TechnologyCategory;
   sourceFile?: string | null;
 }
-
+export interface AnalysisPortEvidence {
+  sourceFile: string;
+  origin:
+    | "KUBERNETES_MANIFEST"
+    | "SOURCE_CODE"
+    | "FRAMEWORK_CONFIG"
+    | "DOCKERFILE"
+    | "ENV_EXAMPLE";
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  requiresReview: boolean;
+  line?: number;
+}
 export interface AnalysisKubernetesEvidence {
   containerPort: number | null;
   servicePort: number | null;
@@ -42,6 +53,7 @@ export interface AnalysisKubernetesEvidence {
   } | null;
   manifestPaths: string[];
   requiresReview: boolean;
+  portEvidence?: AnalysisPortEvidence;
 }
 
 export interface AnalysisComponent {

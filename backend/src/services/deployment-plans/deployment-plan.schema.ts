@@ -119,7 +119,7 @@ export const updatePlanComponentBodySchema = z.strictObject({
   containerPort: portSchema.nullable().optional(),
   servicePort: portSchema.nullable().optional(),
   targetPort: targetPortSchema.nullable().optional(),
-  image: z.string().trim().min(1).optional(),
+  image: z.string().trim().optional(),
   replicas: z.number().int().min(1).optional(),
   resources: resourcesSchema.optional(),
   hpa: hpaSchema.optional(),

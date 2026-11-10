@@ -50,20 +50,43 @@ function getApiError(error: unknown): string {
 
   const response = error as {
     data?: {
-      error?: { message?: string };
+      error?: {
+        message?: string;
+        details?: {
+          fieldErrors?: Record<string, string[]>;
+          formErrors?: string[];
+        };
+      };
       message?: string;
     };
     error?: string;
     message?: string;
   };
 
-  return (
-    response.data?.error?.message ??
+  const apiError = response.data?.error;
+  const details = apiError?.details;
+
+  const fieldMessages = Object.entries(
+    details?.fieldErrors ?? {},
+  ).flatMap(([field, messages]) =>
+    messages.map((message) => `${field}: ${message}`),
+  );
+
+  const allMessages = [
+    ...fieldMessages,
+    ...(details?.formErrors ?? []),
+  ];
+
+  const mainMessage =
+    apiError?.message ??
     response.data?.message ??
     response.message ??
     response.error ??
-    "An unexpected error occurred."
-  );
+    "An unexpected error occurred.";
+
+  return allMessages.length > 0
+    ? `${mainMessage}: ${allMessages.join("; ")}`
+    : mainMessage;
 }
 
 

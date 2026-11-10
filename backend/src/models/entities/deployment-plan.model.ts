@@ -649,18 +649,29 @@ deploymentPlanSchema.methods.approve =
       'APPROVED',
     );
 
-    requireDraft.call(this);
+      requireDraft.call(this);
 
-    assertUniqueComponentNames(
-      this.get('components') as PlanComponent[],
+  const components = this.get('components') as PlanComponent[];
+
+  assertUniqueComponentNames(components);
+
+  await this.validate();
+
+  const missingImages = components
+    .filter(
+      (component) =>
+        typeof component.image !== 'string' ||
+        component.image.trim().length === 0,
+    )
+    .map((component) => component.name);
+
+  if (missingImages.length > 0) {
+    throw new ConflictError(
+      `Container image is required before approval for: ${missingImages.join(', ')}`,
     );
+  }
 
-    await this.validate();
-
-    this.set(
-      'status',
-      'APPROVED',
-    );
+  this.set('status', 'APPROVED');
 
     this.set('review', {
       decidedBy: user,

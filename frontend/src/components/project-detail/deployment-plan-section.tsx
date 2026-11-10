@@ -56,6 +56,7 @@ function getApiError(error: unknown): string {
   );
 }
 
+
 function buildInitialComponents(
   analysis: Analysis | null,
 ): PlanComponent[] {
@@ -63,38 +64,59 @@ function buildInitialComponents(
     return [];
   }
 
-  return analysis.components.map((component) => ({
-    name: component.name,
-    type: component.type as PlanComponentType,
-    containerPort: 0,
-    replicas: 1,
-    resources: {
-      requests: {
-        cpu: "",
-        memory: "",
+  return analysis.components.map((component) => {
+    const evidence = component.kubernetes;
+    const resources = evidence?.resources;
+
+    return {
+      name: component.name,
+      type: component.type as PlanComponentType,
+
+      containerPort:
+        component.type === "WORKER" &&
+        evidence?.containerPort == null
+          ? null
+          : evidence?.containerPort ?? 0,
+
+      servicePort: evidence?.servicePort ?? null,
+      targetPort: evidence?.targetPort ?? null,
+      image: evidence?.image ?? undefined,
+      replicas: 1,
+
+      resources: {
+        requests: {
+          cpu: resources?.requests.cpu ?? "",
+          memory: resources?.requests.memory ?? "",
+        },
+        limits: {
+          cpu: resources?.limits.cpu ?? "",
+          memory: resources?.limits.memory ?? "",
+        },
       },
-      limits: {
-        cpu: "",
-        memory: "",
+
+      hpa: {
+        enabled: false,
       },
-    },
-    hpa: {
-      enabled: false,
-    },
-    ingress: {
-      enabled: false,
-      tls: false,
-    },
-  }));
+
+      ingress: {
+        enabled: false,
+        tls: false,
+      },
+    };
+  });
 }
+
 
 function isComponentValid(component: PlanComponent): boolean {
   const { resources, hpa, ingress } = component;
 
-  const validPort =
-    Number.isInteger(component.containerPort) &&
-    component.containerPort >= 1 &&
-    component.containerPort <= 65535;
+    const validPort =
+    (component.type === "WORKER" &&
+      component.containerPort === null) ||
+    (component.containerPort !== null &&
+      Number.isInteger(component.containerPort) &&
+      component.containerPort >= 1 &&
+      component.containerPort <= 65535);
 
   const validReplicas =
     Number.isInteger(component.replicas) &&
@@ -381,6 +403,8 @@ export function DeploymentPlanSection({
         name: editingName,
         body: {
           containerPort: editedComponent.containerPort,
+          servicePort: editedComponent.servicePort ?? null,
+          targetPort: editedComponent.targetPort ?? null,
           ...(editedComponent.image
             ? { image: editedComponent.image }
             : {}),

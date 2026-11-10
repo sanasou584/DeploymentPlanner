@@ -4,6 +4,9 @@ import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { cn } from "@/utils/class-names";
 import type { Analysis } from "@/types/analysis";
+import {
+  KubernetesEvidenceCard,
+} from "@/components/analysis/kubernetes-evidence-card";
 
 const CATEGORY_LABEL: Record<string, string> = {
   LANGUAGE: "Languages",
@@ -91,6 +94,7 @@ export function AnalysisSummary({ analysis }: { analysis: Analysis | null }) {
         <>
           <TechnologyGrid technologies={analysis.technologies} />
           <ComponentList components={analysis.components} />
+          <KubernetesEvidenceCard components={analysis.components} />
           <DockerBlock docker={analysis.docker} />
           {analysis.detectedFiles.length > 0 ? (
             <div className="flex flex-col gap-2">

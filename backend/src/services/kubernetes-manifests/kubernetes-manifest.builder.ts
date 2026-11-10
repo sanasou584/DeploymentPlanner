@@ -1,7 +1,15 @@
 
-import { ConflictError } from '../../domain/errors/index.js';
-import type { GeneratedFileKind } from '../../domain/enums/generated-file.enums.js';
-import type { PlanComponent } from '../../models/entities/deployment-plan.model.js';
+import {
+  ConflictError,
+} from '../../domain/errors/index.js';
+
+import type {
+  GeneratedFileKind,
+} from '../../domain/enums/generated-file.enums.js';
+
+import type {
+  PlanComponent,
+} from '../../models/entities/deployment-plan.model.js';
 
 export interface ManifestOutput {
   kind: GeneratedFileKind;
@@ -62,10 +70,54 @@ function file(
   };
 }
 
-function deployment(component: PlanComponent): ManifestOutput {
+function requireContainerPort(
+  component: PlanComponent,
+): number {
+  const port = component.containerPort;
+
+  if (
+    port === null ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65535
+  ) {
+    throw new ConflictError(
+      `Component ${component.name} requires a valid container port`,
+    );
+  }
+
+  return port;
+}
+
+function effectiveServicePort(
+  component: PlanComponent,
+): number {
+  return component.servicePort ??
+    requireContainerPort(component);
+}
+
+function effectiveTargetPort(
+  component: PlanComponent,
+): string | number {
+  return component.targetPort ??
+    requireContainerPort(component);
+}
+
+function deployment(
+  component: PlanComponent,
+): ManifestOutput {
   if (!component.image?.trim()) {
     throw new ConflictError(
       `Component ${component.name} requires a container image before manifest generation`,
+    );
+  }
+
+  if (
+    component.type !== 'WORKER' &&
+    component.containerPort === null
+  ) {
+    throw new ConflictError(
+      `Non-worker component ${component.name} requires a container port`,
     );
   }
 
@@ -88,9 +140,13 @@ function deployment(component: PlanComponent): ManifestOutput {
           containers: [{
             name,
             image: component.image,
-            ports: [{
-              containerPort: component.containerPort,
-            }],
+            ...(component.containerPort !== null
+              ? {
+                  ports: [{
+                    containerPort: component.containerPort,
+                  }],
+                }
+              : {}),
             resources: {
               requests: {
                 cpu: component.resources.requests.cpu,
@@ -108,7 +164,9 @@ function deployment(component: PlanComponent): ManifestOutput {
   });
 }
 
-function service(component: PlanComponent): ManifestOutput {
+function service(
+  component: PlanComponent,
+): ManifestOutput {
   const name = component.name;
 
   return file(name, 'K8S_SERVICE', 'service', {
@@ -119,15 +177,17 @@ function service(component: PlanComponent): ManifestOutput {
       type: 'ClusterIP',
       selector: { app: name },
       ports: [{
-        port: 80,
-        targetPort: component.containerPort,
+        port: effectiveServicePort(component),
+        targetPort: effectiveTargetPort(component),
         protocol: 'TCP',
       }],
     },
   });
 }
 
-function ingress(component: PlanComponent): ManifestOutput {
+function ingress(
+  component: PlanComponent,
+): ManifestOutput {
   const name = component.name;
   const host = component.ingress.host;
 
@@ -159,7 +219,9 @@ function ingress(component: PlanComponent): ManifestOutput {
             backend: {
               service: {
                 name,
-                port: { number: 80 },
+                port: {
+                  number: effectiveServicePort(component),
+                },
               },
             },
           }],
@@ -169,7 +231,9 @@ function ingress(component: PlanComponent): ManifestOutput {
   });
 }
 
-function hpa(component: PlanComponent): ManifestOutput {
+function hpa(
+  component: PlanComponent,
+): ManifestOutput {
   const name = component.name;
   const config = component.hpa;
 
@@ -189,7 +253,8 @@ function hpa(component: PlanComponent): ManifestOutput {
       name: 'cpu',
       target: {
         type: 'Utilization',
-        averageUtilization: config.targetCpuUtilizationPercent,
+        averageUtilization:
+          config.targetCpuUtilizationPercent,
       },
     },
   }];
@@ -201,7 +266,8 @@ function hpa(component: PlanComponent): ManifestOutput {
         name: 'memory',
         target: {
           type: 'Utilization',
-          averageUtilization: config.targetMemoryUtilizationPercent,
+          averageUtilization:
+            config.targetMemoryUtilizationPercent,
         },
       },
     });
@@ -245,10 +311,20 @@ export function buildKubernetesManifests(
 
     seen.add(name);
 
-    output.push(
-      deployment(component),
-      service(component),
-    );
+    output.push(deployment(component));
+
+    if (component.containerPort !== null) {
+      output.push(service(component));
+    }
+
+    if (
+      component.ingress.enabled &&
+      component.containerPort === null
+    ) {
+      throw new ConflictError(
+        `Ingress for ${name} requires an exposed container port`,
+      );
+    }
 
     if (component.ingress.enabled) {
       output.push(ingress(component));
@@ -260,7 +336,9 @@ export function buildKubernetesManifests(
   }
 
   if (output.length === 0) {
-    throw new ConflictError('Plan has no components');
+    throw new ConflictError(
+      'Plan has no components',
+    );
   }
 
   return output;

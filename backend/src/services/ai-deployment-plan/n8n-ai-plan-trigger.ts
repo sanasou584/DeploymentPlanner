@@ -1,3 +1,6 @@
+import type {
+  AnalysisKubernetesEvidence,
+} from '../../models/entities/analysis.model.js';
 
 import { ConflictError } from '../../domain/errors/index.js';
 
@@ -5,10 +8,11 @@ export interface AiPlanContext {
   analysisId: string;
   branch: string;
   environment: string;
-  components: Array<{
+    components: Array<{
     name: string;
     type: string;
     rootPath: string;
+    kubernetes?: AnalysisKubernetesEvidence;
   }>;
   technologies: Array<{
     name: string;

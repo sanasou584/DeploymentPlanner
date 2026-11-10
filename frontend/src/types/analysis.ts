@@ -25,10 +25,30 @@ export interface AnalysisTechnology {
   sourceFile?: string | null;
 }
 
+export interface AnalysisKubernetesEvidence {
+  containerPort: number | null;
+  servicePort: number | null;
+  targetPort: number | string | null;
+  image: string | null;
+  resources: {
+    requests: {
+      cpu: string | null;
+      memory: string | null;
+    };
+    limits: {
+      cpu: string | null;
+      memory: string | null;
+    };
+  } | null;
+  manifestPaths: string[];
+  requiresReview: boolean;
+}
+
 export interface AnalysisComponent {
   name: string;
   type: AnalysisComponentType;
   rootPath: string;
+  kubernetes?: AnalysisKubernetesEvidence;
 }
 
 export interface AnalysisDockerFinding {

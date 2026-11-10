@@ -1,4 +1,9 @@
+
 import { Types } from 'mongoose';
+
+import {
+  groundPlanComponents,
+} from './grounded-plan-components.js';
 
 import {
   assertAiProposalImages,
@@ -9,13 +14,33 @@ import {
   NotFoundError,
 } from '../../domain/errors/index.js';
 
-import { DeploymentPlan } from '../../models/entities/index.js';
-import { PlanRepository } from '../../repositories/plan.repository.js';
-import { ProjectRepository } from '../../repositories/project.repository.js';
-import { AnalysisRepository } from '../../repositories/analysis.repository.js';
-import { RecommendationRepository } from '../../repositories/recommendation.repository.js';
-import { AuditLogRepository } from '../../repositories/audit-log.repository.js';
-import { parseOrThrow } from '../../shared/validation/request-validation.js';
+import {
+  DeploymentPlan,
+} from '../../models/entities/index.js';
+
+import {
+  PlanRepository,
+} from '../../repositories/plan.repository.js';
+
+import {
+  ProjectRepository,
+} from '../../repositories/project.repository.js';
+
+import {
+  AnalysisRepository,
+} from '../../repositories/analysis.repository.js';
+
+import {
+  RecommendationRepository,
+} from '../../repositories/recommendation.repository.js';
+
+import {
+  AuditLogRepository,
+} from '../../repositories/audit-log.repository.js';
+
+import {
+  parseOrThrow,
+} from '../../shared/validation/request-validation.js';
 
 import {
   aiPlanResultSchema,
@@ -49,7 +74,10 @@ function validateComponents(
   for (const component of generated) {
     const key = component.name.toLowerCase();
 
-    if (seen.has(key) || expectedTypes.get(key) !== component.type) {
+    if (
+      seen.has(key) ||
+      expectedTypes.get(key) !== component.type
+    ) {
       throw new ConflictError(
         `Invalid AI-generated component: ${component.name}`,
       );
@@ -78,7 +106,9 @@ export function createAiDeploymentPlanService(
     );
 
     if (!project) {
-      throw new NotFoundError('Project not found');
+      throw new NotFoundError(
+        'Project not found',
+      );
     }
 
     const analysis = await analyses.findOneForOwner(
@@ -88,7 +118,9 @@ export function createAiDeploymentPlanService(
     );
 
     if (!analysis) {
-      throw new NotFoundError('Analysis not found');
+      throw new NotFoundError(
+        'Analysis not found',
+      );
     }
 
     if (analysis.status !== 'COMPLETED') {
@@ -104,7 +136,9 @@ export function createAiDeploymentPlanService(
     }
 
     const allRecommendations =
-      await recommendations.listByAnalysis(analysis._id);
+      await recommendations.listByAnalysis(
+        analysis._id,
+      );
 
     const accepted = allRecommendations.filter(
       (item) => item.status === 'ACCEPTED',
@@ -114,37 +148,85 @@ export function createAiDeploymentPlanService(
       analysisId,
       branch: analysis.branch,
       environment: project.environment,
-      components: analysis.components.map((component) => ({
-        name: component.name,
-        type: component.type,
-        rootPath: component.rootPath,
-      })),
-      technologies: analysis.technologies.map((technology) => ({
-        name: technology.name,
-        category: technology.category,
-        ...(technology.version !== undefined
-          ? { version: technology.version }
-          : {}),
-      })),
-      detectedFiles: [...analysis.detectedFiles],
+
+      components: analysis.components.map(
+        (component) => ({
+          name: component.name,
+          type: component.type,
+          rootPath: component.rootPath,
+
+          ...(component.kubernetes
+            ? {
+                kubernetes: {
+                  containerPort:
+                    component.kubernetes.containerPort,
+                  servicePort:
+                    component.kubernetes.servicePort,
+                  targetPort:
+                    component.kubernetes.targetPort,
+                  image:
+                    component.kubernetes.image,
+                  resources:
+                    component.kubernetes.resources,
+                  manifestPaths: [
+                    ...component.kubernetes.manifestPaths,
+                  ],
+                  requiresReview:
+                    component.kubernetes.requiresReview,
+                },
+              }
+            : {}),
+        }),
+      ),
+
+      technologies: analysis.technologies.map(
+        (technology) => ({
+          name: technology.name,
+          category: technology.category,
+
+          ...(technology.version !== undefined
+            ? { version: technology.version }
+            : {}),
+        }),
+      ),
+
+      detectedFiles: [
+        ...analysis.detectedFiles,
+      ],
+
       docker: {
-        hasDockerfile: analysis.docker.hasDockerfile,
-        hasCompose: analysis.docker.hasCompose,
+        hasDockerfile:
+          analysis.docker.hasDockerfile,
+        hasCompose:
+          analysis.docker.hasCompose,
       },
-      recommendations: accepted.map((item) => ({
-        type: item.type,
-        title: item.title,
-        description: item.description,
-        ...(item.componentName
-          ? { componentName: item.componentName }
-          : {}),
-        ...(item.suggestedValue
-          ? { suggestedValue: item.suggestedValue }
-          : {}),
-      })),
+
+      recommendations: accepted.map(
+        (item) => ({
+          type: item.type,
+          title: item.title,
+          description: item.description,
+
+          ...(item.componentName
+            ? {
+                componentName:
+                  item.componentName,
+              }
+            : {}),
+
+          ...(item.suggestedValue
+            ? {
+                suggestedValue:
+                  item.suggestedValue,
+              }
+            : {}),
+        }),
+      ),
     };
 
-    const raw = await workflow.generate(context);
+    const raw = await workflow.generate(
+      context,
+    );
 
     const proposal = parseOrThrow(
       aiPlanResultSchema,
@@ -152,26 +234,43 @@ export function createAiDeploymentPlanService(
       'Invalid AI deployment plan proposal',
     );
 
-        validateComponents(
+    validateComponents(
       context.components,
       proposal.components,
     );
 
-    assertAiProposalImages(
+    const grounded = groundPlanComponents(
       proposal.components,
+      context.components,
     );
 
-    const version = await plans.nextVersionFor(projectId);
-    const actor = new Types.ObjectId(userId);
+    assertAiProposalImages(
+      grounded.components,
+    );
+
+    const version =
+      await plans.nextVersionFor(
+        projectId,
+      );
+
+    const actor =
+      new Types.ObjectId(userId);
 
     const plan = await DeploymentPlan.draft({
       projectId: project._id,
       analysisId: analysis._id,
       createdBy: actor,
       version,
-      components: proposal.components,
-      recommendations: accepted.map((item) => item._id),
+      components: grounded.components,
+      recommendations: accepted.map(
+        (item) => item._id,
+      ),
     });
+
+    const assumptions = [
+      ...proposal.assumptions,
+      ...grounded.warnings,
+    ];
 
     await audit.record({
       actor,
@@ -184,19 +283,22 @@ export function createAiDeploymentPlanService(
       metadata: {
         source: 'AI',
         version,
-        assumptions: proposal.assumptions,
+        assumptions,
       },
     });
 
     return {
       plan,
-      assumptions: proposal.assumptions,
+      assumptions,
     };
   }
 
-  return { generate };
+  return {
+    generate,
+  };
 }
 
-export type AiDeploymentPlanService = ReturnType<
-  typeof createAiDeploymentPlanService
->;
+export type AiDeploymentPlanService =
+  ReturnType<
+    typeof createAiDeploymentPlanService
+  >;

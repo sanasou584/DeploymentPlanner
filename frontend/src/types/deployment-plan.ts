@@ -40,7 +40,9 @@ export interface PlanIngress {
 export interface PlanComponent {
   name: string;
   type: PlanComponentType;
-  containerPort: number;
+  containerPort: number | null;
+  servicePort?: number | null;
+  targetPort?: number | string | null;
   image?: string;
   replicas: number;
   resources: PlanResources;

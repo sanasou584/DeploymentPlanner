@@ -1,8 +1,22 @@
 
 import { z } from 'zod';
 
-import { PLAN_COMPONENT_TYPES } from '../../domain/enums/plan.enums.js';
-import { hexIdSchema } from '../../shared/validation/request-validation.js';
+import {
+  PLAN_COMPONENT_TYPES,
+} from '../../domain/enums/plan.enums.js';
+
+import {
+  hexIdSchema,
+} from '../../shared/validation/request-validation.js';
+
+const portSchema = z.number().int().min(1).max(65535);
+
+const targetPortSchema = z.union([
+  portSchema,
+  z.string().trim().regex(
+    /^[a-z]([a-z0-9-]*[a-z0-9])?$/,
+  ).max(15),
+]);
 
 const resourceAmountSchema = z.strictObject({
   cpu: z.string().trim().min(1),
@@ -18,8 +32,10 @@ const hpaSchema = z.strictObject({
   enabled: z.boolean(),
   minReplicas: z.number().int().min(1).optional(),
   maxReplicas: z.number().int().min(1).optional(),
-  targetCpuUtilizationPercent: z.number().int().min(1).max(100).optional(),
-  targetMemoryUtilizationPercent: z.number().int().min(1).max(100).optional(),
+  targetCpuUtilizationPercent:
+    z.number().int().min(1).max(100).optional(),
+  targetMemoryUtilizationPercent:
+    z.number().int().min(1).max(100).optional(),
 });
 
 const ingressSchema = z.strictObject({
@@ -32,12 +48,50 @@ const ingressSchema = z.strictObject({
 const componentSchema = z.strictObject({
   name: z.string().trim().min(1),
   type: z.enum(PLAN_COMPONENT_TYPES),
-  containerPort: z.number().int().min(1).max(65535),
+  containerPort: portSchema.nullable(),
+  servicePort: portSchema.nullable().optional(),
+  targetPort: targetPortSchema.nullable().optional(),
   image: z.string().trim().min(1).optional(),
   replicas: z.number().int().min(1),
   resources: resourcesSchema,
   hpa: hpaSchema,
   ingress: ingressSchema,
+}).superRefine((component, ctx) => {
+  if (
+    component.type !== 'WORKER' &&
+    component.containerPort === null
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['containerPort'],
+      message: 'Non-worker components require a container port',
+    });
+  }
+
+  if (
+    component.containerPort === null &&
+    component.ingress.enabled
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['ingress'],
+      message: 'Ingress requires a container port',
+    });
+  }
+
+  if (
+    component.containerPort === null &&
+    (
+      component.servicePort != null ||
+      component.targetPort != null
+    )
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['servicePort'],
+      message: 'Service ports require a container port',
+    });
+  }
 });
 
 export const projectPlansParamsSchema = z.strictObject({
@@ -62,7 +116,9 @@ export const createPlanBodySchema = z.strictObject({
 
 export const updatePlanComponentBodySchema = z.strictObject({
   type: z.enum(PLAN_COMPONENT_TYPES).optional(),
-  containerPort: z.number().int().min(1).max(65535).optional(),
+  containerPort: portSchema.nullable().optional(),
+  servicePort: portSchema.nullable().optional(),
+  targetPort: targetPortSchema.nullable().optional(),
   image: z.string().trim().min(1).optional(),
   replicas: z.number().int().min(1).optional(),
   resources: resourcesSchema.optional(),

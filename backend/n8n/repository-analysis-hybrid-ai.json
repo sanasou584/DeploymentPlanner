@@ -11,8 +11,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.2,
       "position": [
-        0,
-        288
+        -224,
+        48
       ],
       "id": "55a8140f-1797-4a6e-b76d-b2a4fcb93f16",
       "name": "Webhook",
@@ -35,8 +35,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        208,
-        288
+        -80,
+        384
       ],
       "id": "aceba729-ae7a-4caa-9546-bdb52e1629c4",
       "name": "start",
@@ -56,8 +56,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        432,
-        208
+        96,
+        256
       ],
       "id": "976de57b-420d-41ed-bf34-c507d5972436",
       "name": "branch",
@@ -72,22 +72,22 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        656,
-        176
+        256,
+        64
       ],
       "id": "0b68c6c5-ff0a-4472-8519-f87e4037af18",
       "name": "tree",
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "//tree feha les fichiers et les dossiers \nconst tree = $input.first().json;\n//SHA du commit selectionne\nconst commitSha = $('branch').first().json.commit.sha;\n\nconst USEFUL = /(^|\\/)(package\\.json|requirements[^/]*\\.txt|pyproject\\.toml|Pipfile|pom\\.xml|build\\.gradle(?:\\.kts)?|settings\\.gradle(?:\\.kts)?|gradle\\.properties|[^/]+\\.(?:csproj|fsproj)|Directory\\.Build\\.props|global\\.json|go\\.mod|Cargo\\.toml|composer\\.json|Gemfile|pubspec\\.yaml|[^/]+\\.slnx?|Dockerfile[^/]*|docker-compose[^/]*\\.ya?ml|compose\\.ya?ml|\\.dockerignore)$|^\\.github\\/workflows\\/[^/]+\\.ya?ml$/i;\nconst IGNORED = /(^|\\/)(node_modules|dist|vendor|\\.git)\\//;\n\nconst MAX_FILES = 40;\nconst MAX_SIZE = 200000;\n//Filtrer les fichiers intéressants\nif (!Array.isArray(tree.tree)) {\n  throw new Error('Invalid GitHub tree response');\n}\n\nif (tree.truncated === true) {\n  throw new Error('GitHub repository tree is truncated');\n}\n\nconst blobs = tree.tree.filter(\n  (entry) =>\n    entry.type === 'blob' &&\n    typeof entry.path === 'string'\n);\n\nconst treePaths = blobs.map(\n  (entry) => entry.path\n);\n\nconst files = blobs\n  .filter(\n    (entry) =>\n      USEFUL.test(entry.path) &&\n      !IGNORED.test(entry.path) &&\n      (entry.size ?? 0) <= MAX_SIZE\n  )\n  .sort((a, b) => {\n    const depthA = a.path.split('/').length;\n    const depthB = b.path.split('/').length;\n\n    return depthA - depthB ||\n      a.path.localeCompare(b.path);\n  })\n  .slice(0, MAX_FILES)\n  .map((entry) => ({\n    path: entry.path,\n  }));\n\nconst completeBody = {\n  detectedFiles: files.map((file) => file.path),\n  technologies: [],\n  components: [],\n  docker: {\n    hasDockerfile: treePaths.some((path) =>\n      /(^|\\/)dockerfile[^/]*$/i.test(path)\n    ),\n    hasCompose: treePaths.some((path) =>\n      /(^|\\/)docker-compose[^/]*\\.ya?ml$/i.test(path)\n    ),\n    findings: []\n  }\n};\n\nreturn [\n  {\n    json: {\n      commitSha,\n      truncated: tree.truncated,\n      treePaths,\n      files,\n      completeBody\n    }\n  }\n];\n"
+        "jsCode": "\nconst input = $input.first().json;\n\nif (!Array.isArray(input.tree)) {\n  throw new Error(\"GitHub tree is missing\");\n}\n\nif (input.truncated === true) {\n  throw new Error(\"GitHub tree is truncated\");\n}\n\nconst rules = [\n  /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i,\n  /^kubernetes-manifests\\/.*\\.ya?ml$/i,\n  /^kustomize\\/base\\/.*\\.ya?ml$/i,\n  /^skaffold\\.ya?ml$/i,\n  /(^|\\/)(docker-compose|compose)\\.ya?ml$/i,\n  /(^|\\/)(package\\.json|go\\.mod|pom\\.xml|build\\.gradle|settings\\.gradle|requirements\\.txt|pyproject\\.toml)$/i,\n  /(^|\\/)[^/]+\\.csproj$/i,\n  /^helm-chart\\/values\\.yaml$/i,\n];\n\nconst treePaths = input.tree\n  .filter(entry => entry.type === \"blob\")\n  .map(entry => entry.path);\n\nconst selectedPaths = [...new Set(\n  treePaths.filter(path =>\n    rules.some(rule => rule.test(path))\n  )\n)].sort();\n\nconst files = selectedPaths.map(path => ({ path }));\n\nconst required = [\n  \"src/cartservice/src/Dockerfile\",\n  \"kubernetes-manifests/frontend.yaml\",\n  \"skaffold.yaml\",\n];\n\nconst missing = required.filter(\n  path => !selectedPaths.includes(path)\n);\n\nreturn [{\n  json: {\n    codeVersion: \"FILTER_V3\",\n    commitSha: input.sha,\n    truncated: input.truncated,\n    treePaths,\n    files,\n    completeBody: {\n      detectedFiles: selectedPaths,\n      technologies: [],\n      components: [],\n      docker: {\n        hasDockerfile: selectedPaths.some(\n          path => /(^|\\/)Dockerfile(?:\\.[^/]+)?$/i.test(path)\n        ),\n        hasCompose: selectedPaths.some(\n          path => /(^|\\/)(docker-compose|compose)\\.ya?ml$/i.test(path)\n        ),\n        findings: [],\n      },\n    },\n    diagnostic: {\n      selectedCount: files.length,\n      missingFiles: missing,\n      validationPassed: missing.length === 0,\n    },\n  },\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
-        144
+        464,
+        80
       ],
       "id": "dc154126-147a-4b19-96c8-dcc854033d04",
       "name": "filter",
@@ -155,8 +155,8 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1.1,
       "position": [
-        1344,
-        128
+        944,
+        -160
       ],
       "id": "d00d0430-a695-4c0b-b213-4618300e873d",
       "name": "split-files",
@@ -177,8 +177,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        1600,
-        128
+        1120,
+        -256
       ],
       "id": "1abbdf1e-4349-47db-8ffc-f2ab99416f18",
       "name": "fetch-file-content",
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.aggregate",
       "typeVersion": 1,
       "position": [
-        2048,
-        128
+        1632,
+        -384
       ],
       "id": "3a48c524-fb33-4c1e-824a-8c6a7f0fa9fb",
       "name": "aggregate-files",
@@ -202,13 +202,13 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst downloaded = $input.all();\nconst selectedFiles = $('split-files').all();\n\nif (downloaded.length !== selectedFiles.length) {\n  throw new Error(\n    'Downloaded files count does not match selected files count'\n  );\n}\n\nreturn downloaded.map((item, index) => {\n  const selected = selectedFiles[index]?.json;\n\n  const path = selected?.files?.path ?? selected?.path;\n\n  if (typeof path !== 'string') {\n    throw new Error('Missing file path');\n  }\n\n  if (typeof item.json.content !== 'string') {\n    throw new Error(`Missing content for ${path}`);\n  }\n\n  return {\n    json: {\n      path,\n      content: item.json.content\n    }\n  };\n});\n"
+        "jsCode": "\nconst currentItems = $input.all();\nconst sourceItems = $('split-files').all();\n\nif (currentItems.length === 0) {\n  throw new Error('No file contents received');\n}\n\nif (currentItems.length !== sourceItems.length) {\n  throw new Error(\n    `File count mismatch: received ${currentItems.length} contents for ${sourceItems.length} paths`\n  );\n}\n\nreturn currentItems.map((item, index) => {\n  const current = item.json;\n  const source = sourceItems[index]?.json;\n\n  const path = source?.files?.path;\n\n  if (typeof path !== 'string' || !path.trim()) {\n    throw new Error(\n      `Missing repository file path at item ${index}`\n    );\n  }\n\n  if (typeof current.content !== 'string') {\n    throw new Error(\n      `Missing file content for ${path}`\n    );\n  }\n\n  const segments = path.split('/');\n\n  const componentRoot =\n    segments[0] === 'src' && segments.length >= 3\n      ? `${segments[0]}/${segments[1]}`\n      : null;\n\n  return {\n    json: {\n      path,\n      fileName: segments[segments.length - 1],\n      componentRoot,\n      content: current.content,\n      size: current.content.length,\n      commitSha: source.commitSha ?? null,\n    },\n    pairedItem: {\n      item: index,\n    },\n  };\n});\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1824,
-        128
+        1344,
+        -336
       ],
       "id": "5496d072-5834-4d6e-acec-d921d60393c1",
       "name": "prepare-file",
@@ -221,8 +221,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2272,
-        128
+        1952,
+        -480
       ],
       "id": "9ca073b7-8d08-4221-accc-4d7eac16ff3d",
       "name": "analyse-files",
@@ -256,8 +256,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.4,
       "position": [
-        1104,
-        144
+        704,
+        -32
       ],
       "id": "d8d7ab9c-6538-4c45-b4fa-28cc532a8912",
       "name": "has-files"
@@ -283,7 +283,7 @@
             "caseSensitive": true,
             "leftValue": "",
             "typeValidation": "strict",
-            "version": 2
+            "version": 4
           },
           "conditions": [
             {
@@ -353,7 +353,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst response = $input.first().json;\nconst prepared = $('prepare-ai-context').first().json;\n\nconst staticBody = prepared.completeBody;\n\nif (\n  !staticBody ||\n  typeof staticBody !== 'object' ||\n  Array.isArray(staticBody)\n) {\n  throw new Error('Missing static completeBody');\n}\n\nconst staticTechnologies = Array.isArray(staticBody.technologies)\n  ? staticBody.technologies\n  : [];\n\nconst staticComponents = Array.isArray(staticBody.components)\n  ? staticBody.components\n  : [];\n\nconst aiFiles = Array.isArray(prepared.aiContext?.files)\n  ? prepared.aiContext.files\n  : [];\n\nconst fileContents = new Map(\n  aiFiles\n    .filter(file =>\n      typeof file?.path === 'string' &&\n      typeof file?.content === 'string'\n    )\n    .map(file => [file.path, file.content])\n);\n\nconst allowedCategories = new Set([\n  'LANGUAGE',\n  'FRAMEWORK',\n  'LIBRARY',\n  'DATABASE',\n  'BUILD_TOOL',\n  'RUNTIME',\n  'OTHER'\n]);\n\nconst allowedComponentTypes = new Set([\n  'FRONTEND',\n  'BACKEND',\n  'DATABASE',\n  'WORKER',\n  'OTHER'\n]);\n\nconst diagnostics = {\n  attempted: true,\n  accepted: false,\n  addedTechnologies: 0,\n  addedComponents: 0,\n  rejectedTechnologies: 0,\n  rejectedComponents: 0,\n  errors: [],\n  warnings: []\n};\n\nconst technologies = staticTechnologies.map(tech => ({\n  ...tech\n}));\n\nconst components = staticComponents.map(component => ({\n  ...component\n}));\n\nconst technologyKeys = new Set(\n  technologies.map(tech =>\n    `${tech.name.toLowerCase()}:${tech.category}`\n  )\n);\n\nconst componentKeys = new Set(\n  components.map(component =>\n    `${component.type}:${component.rootPath}`\n  )\n);\n\nfunction isObject(value) {\n  return (\n    value !== null &&\n    typeof value === 'object' &&\n    !Array.isArray(value)\n  );\n}\n\nfunction nonEmptyString(value) {\n  return typeof value === 'string' && value.trim().length > 0;\n}\n\nfunction normalizePath(value) {\n  if (!nonEmptyString(value)) return null;\n\n  const path = value.trim().replace(/\\\\/g, '/');\n\n  if (\n    path.startsWith('/') ||\n    path.startsWith('./') ||\n    path.includes('//') ||\n    path.split('/').includes('..') ||\n    path.split('/').includes('.')\n  ) {\n    return null;\n  }\n\n  return path;\n}\n\nfunction parseModelResponse(result) {\n  if (result.error) {\n    throw new Error('AI HTTP request returned an error');\n  }\n\n  if (\n    result.statusCode &&\n    Number(result.statusCode) >= 400\n  ) {\n    throw new Error(\n      `AI HTTP request failed: ${result.statusCode}`\n    );\n  }\n\n  const payload = isObject(result.body)\n    ? result.body\n    : result;\n\n  let content =\n    payload.choices?.[0]?.message?.content ??\n    payload.output_text ??\n    payload;\n\n  if (isObject(content)) {\n    return content;\n  }\n\n  if (!nonEmptyString(content)) {\n    throw new Error('AI response has no content');\n  }\n\n  let text = content.trim();\n\n  const fenced = text.match(\n    /^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i\n  );\n\n  if (fenced) {\n    text = fenced[1].trim();\n  }\n\n  const parsed = JSON.parse(text);\n\n  if (!isObject(parsed)) {\n    throw new Error('AI response must be a JSON object');\n  }\n\n  return parsed;\n}\n\nfunction hasFileEvidence(path) {\n  return fileContents.has(path);\n}\n\nfunction normalizeTechName(name) {\n  return name.trim().toLowerCase();\n}\n\nfunction technologyEvidence(name, content) {\n  const normalizedName = normalizeTechName(name);\n  const lowerContent = content.toLowerCase();\n\n  const signatures = {\n    'spring boot': [\n      'spring-boot',\n      'org.springframework.boot'\n    ],\n    'spring data jpa': [\n      'spring-boot-starter-data-jpa',\n      'spring-data-jpa'\n    ],\n    'spring security': [\n      'spring-boot-starter-security',\n      'spring-security'\n    ],\n    'java': [\n      '<java.version>',\n      'maven.compiler.source',\n      'eclipse-temurin',\n      'openjdk',\n      'sourcecompatibility'\n    ],\n    'vite': [\n      '\"vite\"',\n      \"'vite'\",\n      '@vitejs/'\n    ],\n    'react': [\n      '\"react\"',\n      \"'react'\",\n      'react-dom'\n    ],\n    'next.js': [\n      '\"next\"',\n      \"'next'\"\n    ],\n    'node.js': [\n      '\"node\"',\n      'node:',\n      'nodejs'\n    ],\n    'typescript': [\n      '\"typescript\"',\n      'tsconfig.json'\n    ],\n    'h2 database': [\n      '<artifactid>h2</artifactid>',\n      'com.h2database',\n      'jdbc:h2:'\n    ],\n    'postgresql': [\n      'postgres:',\n      'postgresql',\n      'npgsql',\n      '\"pg\"'\n    ],\n    'mysql': [\n      'mysql:',\n      'mysql-connector',\n      '\"mysql2\"'\n    ],\n    'mongodb': [\n      'mongodb',\n      '\"mongoose\"'\n    ],\n    'nginx': [\n      'nginx:',\n      'nginx.conf'\n    ],\n    'docker': [\n      'docker build',\n      'docker compose',\n      'docker-compose',\n      'docker/'\n    ],\n    'github actions': [\n      'actions/checkout',\n      'actions/setup-node',\n      'actions/setup-java',\n      'runs-on:'\n    ],\n    'kubernetes': [\n      'apiversion:',\n      'kind: deployment',\n      'kind: service',\n      'kubectl'\n    ],\n    'fastapi': [\n      'fastapi'\n    ],\n    'django': [\n      'django'\n    ],\n    'flask': [\n      'flask'\n    ],\n    'express.js': [\n      '\"express\"',\n      \"'express'\"\n    ],\n    'nestjs': [\n      '@nestjs/core'\n    ],\n    'go': [\n      'module ',\n      'go 1.'\n    ],\n    'ruby': [\n      'ruby',\n      'gem '\n    ],\n    'sinatra': [\n      'sinatra'\n    ],\n    'php': [\n      'php:',\n      '<?php',\n      '\"php\"'\n    ],\n    'laravel': [\n      'laravel/framework'\n    ],\n    'asp.net core': [\n      'microsoft.net.sdk.web',\n      'microsoft.aspnetcore'\n    ],\n    '.net': [\n      '<targetframework>',\n      '<targetframeworks>'\n    ],\n    'entity framework core': [\n      'microsoft.entityframeworkcore'\n    ],\n    'npgsql': [\n      'npgsql'\n    ]\n  };\n\n  const knownSignatures = signatures[normalizedName];\n\n  if (knownSignatures) {\n    return knownSignatures.some(signature =>\n      lowerContent.includes(signature)\n    );\n  }\n\n  if (normalizedName.length < 3) {\n    return false;\n  }\n\n  return lowerContent.includes(normalizedName);\n}\n\nfunction validateTechnology(candidate) {\n  if (!isObject(candidate)) {\n    return { valid: false, reason: 'Invalid object' };\n  }\n\n  const name = candidate.name;\n  const category = candidate.category;\n  const sourceFile = normalizePath(candidate.sourceFile);\n\n  if (\n    !nonEmptyString(name) ||\n    name.trim().length > 100\n  ) {\n    return { valid: false, reason: 'Invalid technology name' };\n  }\n\n  if (!allowedCategories.has(category)) {\n    return { valid: false, reason: 'Invalid category' };\n  }\n\n  if (!sourceFile || !hasFileEvidence(sourceFile)) {\n    return { valid: false, reason: 'Unknown sourceFile' };\n  }\n\n  const content = fileContents.get(sourceFile);\n\n  if (!technologyEvidence(name, content)) {\n    return {\n      valid: false,\n      reason: 'Technology not supported by source file content'\n    };\n  }\n\n  const technology = {\n    name: name.trim(),\n    category,\n    sourceFile\n  };\n\n  if (candidate.version !== undefined) {\n    if (\n      !nonEmptyString(candidate.version) ||\n      candidate.version.length > 100\n    ) {\n      return { valid: false, reason: 'Invalid version' };\n    }\n\n    const version = candidate.version.trim();\n\n    const isDatabase = category === 'DATABASE';\n\n    if (isDatabase) {\n      const isServerDeclaration =\n        /(?:docker-compose|compose)\\.ya?ml$/i.test(sourceFile) &&\n        content.includes(version);\n\n      if (isServerDeclaration) {\n        technology.version = version;\n      }\n    } else if (content.includes(version)) {\n      technology.version = version;\n    }\n  }\n\n  return { valid: true, technology };\n}\n\nfunction normalizeRoot(path) {\n  if (path === '.') return '.';\n  return normalizePath(path);\n}\n\nfunction validateComponent(candidate) {\n  if (!isObject(candidate)) {\n    return { valid: false, reason: 'Invalid object' };\n  }\n\n  const name = candidate.name;\n  const type = candidate.type;\n  const rootPath = normalizeRoot(candidate.rootPath);\n\n  if (\n    !nonEmptyString(name) ||\n    name.trim().length > 120\n  ) {\n    return { valid: false, reason: 'Invalid component name' };\n  }\n\n  if (!allowedComponentTypes.has(type)) {\n    return { valid: false, reason: 'Invalid component type' };\n  }\n\n  if (!rootPath) {\n    return { valid: false, reason: 'Invalid rootPath' };\n  }\n\n  const matchingFiles = [...fileContents.keys()].filter(path =>\n    rootPath === '.' ||\n    path === rootPath ||\n    path.startsWith(`${rootPath}/`)\n  );\n\n  if (matchingFiles.length === 0) {\n    return {\n      valid: false,\n      reason: 'No source files found for component'\n    };\n  }\n\n  const component = {\n    name: name.trim(),\n    type,\n    rootPath\n  };\n\n  return { valid: true, component };\n}\n\nlet parsed = null;\n\ntry {\n  parsed = parseModelResponse(response);\n} catch (error) {\n  diagnostics.errors.push(\n    error instanceof Error\n      ? error.message\n      : String(error)\n  );\n}\n\nif (parsed) {\n  const validStructure =\n    Array.isArray(parsed.technologies) &&\n    Array.isArray(parsed.components);\n\n  if (!validStructure) {\n    diagnostics.errors.push(\n      'AI response must contain technologies and components arrays'\n    );\n  } else {\n    diagnostics.accepted = true;\n\n    for (const candidate of parsed.technologies.slice(0, 100)) {\n      const result = validateTechnology(candidate);\n\n      if (!result.valid) {\n        diagnostics.rejectedTechnologies++;\n        diagnostics.warnings.push(\n          `Technology rejected: ${result.reason}`\n        );\n        continue;\n      }\n\n      const tech = result.technology;\n\n      const key =\n        `${tech.name.toLowerCase()}:${tech.category}`;\n\n      if (technologyKeys.has(key)) {\n        continue;\n      }\n\n      technologyKeys.add(key);\n      technologies.push(tech);\n      diagnostics.addedTechnologies++;\n    }\n\n    for (const candidate of parsed.components.slice(0, 50)) {\n      const result = validateComponent(candidate);\n\n      if (!result.valid) {\n        diagnostics.rejectedComponents++;\n        diagnostics.warnings.push(\n          `Component rejected: ${result.reason}`\n        );\n        continue;\n      }\n\n      const component = result.component;\n\n      const key =\n        `${component.type}:${component.rootPath}`;\n\n      if (componentKeys.has(key)) {\n        continue;\n      }\n\n      componentKeys.add(key);\n      components.push(component);\n      diagnostics.addedComponents++;\n    }\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...prepared,\n\n      completeBody: {\n        ...staticBody,\n        technologies,\n        components\n      },\n\n      aiDiagnostics: diagnostics\n    }\n  }\n];\n"
+        "jsCode": "\nconst response = $input.first().json;\nconst prepared = $('prepare-ai-context').first().json;\n\nconst staticBody = prepared.completeBody;\n\nif (\n  !staticBody ||\n  typeof staticBody !== 'object' ||\n  Array.isArray(staticBody)\n) {\n  throw new Error('Missing static completeBody');\n}\n\nconst staticTechnologies = Array.isArray(staticBody.technologies)\n  ? staticBody.technologies\n  : [];\n\nconst staticComponents = Array.isArray(staticBody.components)\n  ? staticBody.components\n  : [];\n\nconst aiFiles = Array.isArray(prepared.aiContext?.files)\n  ? prepared.aiContext.files\n  : [];\n\nconst fileContents = new Map(\n  aiFiles\n    .filter(file =>\n      typeof file?.path === 'string' &&\n      typeof file?.content === 'string'\n    )\n    .map(file => [file.path, file.content])\n);\n\nconst allowedCategories = new Set([\n  'LANGUAGE',\n  'FRAMEWORK',\n  'LIBRARY',\n  'DATABASE',\n  'BUILD_TOOL',\n  'RUNTIME',\n  'OTHER'\n]);\n\nconst allowedComponentTypes = new Set([\n  'FRONTEND',\n  'BACKEND',\n  'DATABASE',\n  'WORKER',\n  'OTHER'\n]);\n\nconst diagnostics = {\n  attempted: true,\n  accepted: false,\n  addedTechnologies: 0,\n  addedComponents: 0,\n  rejectedTechnologies: 0,\n  rejectedComponents: 0,\n  errors: [],\n  warnings: []\n};\n\nconst technologies = staticTechnologies.map(tech => ({\n  ...tech\n}));\n\nconst components = staticComponents.map(component => ({\n  ...component\n}));\n\nconst technologyKeys = new Set(\n  technologies.map(tech =>\n    `${tech.name.toLowerCase()}:${tech.category}`\n  )\n);\n\nconst componentKeys = new Set(\n  components.map(component =>\n    `${component.type}:${component.rootPath}`\n  )\n);\n\nfunction isObject(value) {\n  return (\n    value !== null &&\n    typeof value === 'object' &&\n    !Array.isArray(value)\n  );\n}\n\nfunction nonEmptyString(value) {\n  return (\n    typeof value === 'string' &&\n    value.trim().length > 0\n  );\n}\n\nfunction normalizePath(value) {\n  if (!nonEmptyString(value)) {\n    return null;\n  }\n\n  const path = value.trim().replace(/\\\\/g, '/');\n\n  if (\n    path.startsWith('/') ||\n    path.startsWith('./') ||\n    path.includes('//') ||\n    path.split('/').includes('..') ||\n    path.split('/').includes('.')\n  ) {\n    return null;\n  }\n\n  return path;\n}\n\nfunction parseModelResponse(result) {\n  if (result.error) {\n    throw new Error(\n      'AI HTTP request returned an error'\n    );\n  }\n\n  if (\n    result.statusCode &&\n    Number(result.statusCode) >= 400\n  ) {\n    throw new Error(\n      `AI HTTP request failed: ${result.statusCode}`\n    );\n  }\n\n  const payload = isObject(result.body)\n    ? result.body\n    : result;\n\n  let content =\n    payload.choices?.[0]?.message?.content ??\n    payload.output_text ??\n    payload;\n\n  if (isObject(content)) {\n    return content;\n  }\n\n  if (!nonEmptyString(content)) {\n    throw new Error(\n      'AI response has no content'\n    );\n  }\n\n  let text = content.trim();\n\n  const fenced = text.match(\n    /^```(?:json)?\\s*([\\s\\S]*?)\\s*```$/i\n  );\n\n  if (fenced) {\n    text = fenced[1].trim();\n  }\n\n  const parsed = JSON.parse(text);\n\n  if (!isObject(parsed)) {\n    throw new Error(\n      'AI response must be a JSON object'\n    );\n  }\n\n  return parsed;\n}\n\nfunction hasFileEvidence(path) {\n  return fileContents.has(path);\n}\n\nfunction normalizeTechName(name) {\n  return name.trim().toLowerCase();\n}\n\nfunction technologyEvidence(name, content) {\n  const normalizedName = normalizeTechName(name);\n  const lowerContent = content.toLowerCase();\n\n  const signatures = {\n    'spring boot': [\n      'spring-boot',\n      'org.springframework.boot'\n    ],\n    'spring data jpa': [\n      'spring-boot-starter-data-jpa',\n      'spring-data-jpa'\n    ],\n    'spring security': [\n      'spring-boot-starter-security',\n      'spring-security'\n    ],\n    'java': [\n      '<java.version>',\n      'maven.compiler.source',\n      'eclipse-temurin',\n      'openjdk',\n      'sourcecompatibility'\n    ],\n    'vite': [\n      '\"vite\"',\n      \"'vite'\",\n      '@vitejs/'\n    ],\n    'react': [\n      '\"react\"',\n      \"'react'\",\n      'react-dom'\n    ],\n    'next.js': [\n      '\"next\"',\n      \"'next'\"\n    ],\n    'node.js': [\n      '\"node\"',\n      'node:',\n      'nodejs'\n    ],\n    'typescript': [\n      '\"typescript\"',\n      'tsconfig.json'\n    ],\n    'h2 database': [\n      '<artifactid>h2</artifactid>',\n      'com.h2database',\n      'jdbc:h2:'\n    ],\n    'postgresql': [\n      'postgres:',\n      'postgresql',\n      'npgsql',\n      '\"pg\"'\n    ],\n    'mysql': [\n      'mysql:',\n      'mysql-connector',\n      '\"mysql2\"'\n    ],\n    'mongodb': [\n      'mongodb',\n      '\"mongoose\"'\n    ],\n    'nginx': [\n      'nginx:',\n      'nginx.conf'\n    ],\n    'docker': [\n      'docker build',\n      'docker compose',\n      'docker-compose',\n      'docker/'\n    ],\n    'github actions': [\n      'actions/checkout',\n      'actions/setup-node',\n      'actions/setup-java',\n      'runs-on:'\n    ],\n    'kubernetes': [\n      'apiversion:',\n      'kind: deployment',\n      'kind: service',\n      'kubectl'\n    ],\n    'fastapi': [\n      'fastapi'\n    ],\n    'django': [\n      'django'\n    ],\n    'flask': [\n      'flask'\n    ],\n    'express.js': [\n      '\"express\"',\n      \"'express'\"\n    ],\n    'nestjs': [\n      '@nestjs/core'\n    ],\n    'go': [\n      'module ',\n      'go 1.'\n    ],\n    'ruby': [\n      'ruby',\n      'gem '\n    ],\n    'sinatra': [\n      'sinatra'\n    ],\n    'php': [\n      'php:',\n      '<?php',\n      '\"php\"'\n    ],\n    'laravel': [\n      'laravel/framework'\n    ],\n    'asp.net core': [\n      'microsoft.net.sdk.web',\n      'microsoft.aspnetcore'\n    ],\n    '.net': [\n      '<targetframework>',\n      '<targetframeworks>'\n    ],\n    'entity framework core': [\n      'microsoft.entityframeworkcore'\n    ],\n    'npgsql': [\n      'npgsql'\n    ]\n  };\n\n  const knownSignatures = signatures[normalizedName];\n\n  if (knownSignatures) {\n    return knownSignatures.some(signature =>\n      lowerContent.includes(signature)\n    );\n  }\n\n  if (normalizedName.length < 3) {\n    return false;\n  }\n\n  return lowerContent.includes(normalizedName);\n}\n\nfunction validateTechnology(candidate) {\n  if (!isObject(candidate)) {\n    return {\n      valid: false,\n      reason: 'Invalid object'\n    };\n  }\n\n  const name = candidate.name;\n  const category = candidate.category;\n  const sourceFile = normalizePath(\n    candidate.sourceFile\n  );\n\n  if (\n    !nonEmptyString(name) ||\n    name.trim().length > 100\n  ) {\n    return {\n      valid: false,\n      reason: 'Invalid technology name'\n    };\n  }\n\n  if (!allowedCategories.has(category)) {\n    return {\n      valid: false,\n      reason: 'Invalid category'\n    };\n  }\n\n  if (\n    !sourceFile ||\n    !hasFileEvidence(sourceFile)\n  ) {\n    return {\n      valid: false,\n      reason: 'Unknown sourceFile'\n    };\n  }\n\n  const content = fileContents.get(sourceFile);\n\n  if (!technologyEvidence(name, content)) {\n    return {\n      valid: false,\n      reason:\n        'Technology not supported by source file content'\n    };\n  }\n\n  const technology = {\n    name: name.trim(),\n    category,\n    sourceFile\n  };\n\n  if (candidate.version !== undefined) {\n    if (\n      !nonEmptyString(candidate.version) ||\n      candidate.version.length > 100\n    ) {\n      return {\n        valid: false,\n        reason: 'Invalid version'\n      };\n    }\n\n    const version = candidate.version.trim();\n    const isDatabase = category === 'DATABASE';\n\n    if (isDatabase) {\n      const isServerDeclaration =\n        /(?:docker-compose|compose)\\.ya?ml$/i.test(\n          sourceFile\n        ) &&\n        content.includes(version);\n\n      if (isServerDeclaration) {\n        technology.version = version;\n      }\n    } else if (content.includes(version)) {\n      technology.version = version;\n    }\n  }\n\n  return {\n    valid: true,\n    technology\n  };\n}\n\nfunction normalizeRoot(path) {\n  if (path === '.') {\n    return '.';\n  }\n\n  return normalizePath(path);\n}\n\nfunction validateComponent(candidate) {\n  if (!isObject(candidate)) {\n    return {\n      valid: false,\n      reason: 'Invalid object'\n    };\n  }\n\n  const name = candidate.name;\n  const type = candidate.type;\n  const rootPath = normalizeRoot(\n    candidate.rootPath\n  );\n\n  if (\n    !nonEmptyString(name) ||\n    name.trim().length > 120\n  ) {\n    return {\n      valid: false,\n      reason: 'Invalid component name'\n    };\n  }\n\n  if (!allowedComponentTypes.has(type)) {\n    return {\n      valid: false,\n      reason: 'Invalid component type'\n    };\n  }\n\n  if (!rootPath) {\n    return {\n      valid: false,\n      reason: 'Invalid rootPath'\n    };\n  }\n\n  const matchingFiles = [\n    ...fileContents.keys()\n  ].filter(path =>\n    rootPath === '.' ||\n    path === rootPath ||\n    path.startsWith(`${rootPath}/`)\n  );\n\n  if (matchingFiles.length === 0) {\n    return {\n      valid: false,\n      reason:\n        'No source files found for component'\n    };\n  }\n\n  const component = {\n    name: name.trim(),\n    type,\n    rootPath\n  };\n\n  return {\n    valid: true,\n    component\n  };\n}\n\nlet parsed = null;\n\ntry {\n  parsed = parseModelResponse(response);\n} catch (error) {\n  diagnostics.errors.push(\n    error instanceof Error\n      ? error.message\n      : String(error)\n  );\n}\n\nif (parsed) {\n  const validStructure =\n    Array.isArray(parsed.technologies) &&\n    Array.isArray(parsed.components);\n\n  if (!validStructure) {\n    diagnostics.errors.push(\n      'AI response must contain technologies and components arrays'\n    );\n  } else {\n    diagnostics.accepted = true;\n\n    for (\n      const candidate of parsed.technologies.slice(0, 100)\n    ) {\n      const result = validateTechnology(candidate);\n\n      if (!result.valid) {\n        diagnostics.rejectedTechnologies++;\n\n        diagnostics.warnings.push(\n          `Technology rejected: ${result.reason}`\n        );\n\n        continue;\n      }\n\n      const tech = result.technology;\n\n      const key =\n        `${tech.name.toLowerCase()}:${tech.category}`;\n\n      if (technologyKeys.has(key)) {\n        continue;\n      }\n\n      technologyKeys.add(key);\n      technologies.push(tech);\n\n      diagnostics.addedTechnologies++;\n    }\n\n    for (\n      const candidate of parsed.components.slice(0, 50)\n    ) {\n      const result = validateComponent(candidate);\n\n      if (!result.valid) {\n        diagnostics.rejectedComponents++;\n\n        diagnostics.warnings.push(\n          `Component rejected: ${result.reason}`\n        );\n\n        continue;\n      }\n\n      const component = result.component;\n\n      const key =\n        `${component.type}:${component.rootPath}`;\n\n      if (componentKeys.has(key)) {\n        continue;\n      }\n\n      componentKeys.add(key);\n      components.push(component);\n\n      diagnostics.addedComponents++;\n    }\n  }\n}\n\nconst extractedEvidence = Array.isArray(\n  prepared.kubernetesEvidence?.components\n)\n  ? prepared.kubernetesEvidence.components\n  : [];\n\nconst evidenceByName = new Map(\n  extractedEvidence\n    .filter(item =>\n      nonEmptyString(item?.name) &&\n      Array.isArray(item?.manifestPaths) &&\n      item.manifestPaths.length > 0\n    )\n    .map(item => [\n      item.name.toLowerCase(),\n      item\n    ])\n);\n\nfunction getKubernetesEvidence(component) {\n  const existing = component.kubernetes;\n\n  if (isObject(existing)) {\n    return existing;\n  }\n\n  const extracted = evidenceByName.get(\n    component.name.toLowerCase()\n  );\n\n  if (!extracted) {\n    return null;\n  }\n\n  return {\n    containerPort: extracted.containerPort ?? null,\n    servicePort: extracted.servicePort ?? null,\n    targetPort: extracted.targetPort ?? null,\n    image: extracted.image ?? null,\n    resources: extracted.resources ?? null,\n    manifestPaths: extracted.manifestPaths,\n    requiresReview:\n      extracted.requiresReview ?? true\n  };\n}\n\nconst enrichedComponents = components.map(component => {\n  const kubernetes = getKubernetesEvidence(\n    component\n  );\n\n  if (!kubernetes) {\n    return {\n      ...component\n    };\n  }\n\n  return {\n    ...component,\n    kubernetes\n  };\n});\n\nconst kubernetesDiagnostics = {\n  version:\n    prepared.kubernetesEvidence?.version ??\n    'K8S_EVIDENCE_UNAVAILABLE',\n\n  totalComponents: enrichedComponents.length,\n\n  enrichedComponents: enrichedComponents.filter(\n    component => isObject(component.kubernetes)\n  ).length,\n\n  componentsWithoutEvidence: enrichedComponents\n    .filter(component =>\n      !isObject(component.kubernetes)\n    )\n    .map(component => component.name),\n\n  componentsRequiringReview: enrichedComponents\n    .filter(component =>\n      component.kubernetes?.requiresReview === true\n    )\n    .map(component => component.name)\n};\n\nreturn [\n  {\n    json: {\n      ...prepared,\n\n      completeBody: {\n        ...staticBody,\n        technologies,\n        components: enrichedComponents\n      },\n\n      kubernetesEvidence:\n        prepared.kubernetesEvidence ?? null,\n\n      kubernetesDiagnostics,\n\n      aiDiagnostics: diagnostics\n    }\n  }\n];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -364,6 +364,32 @@
       "id": "1c2dccb6-efc2-459b-9d37-aedeb436003e",
       "name": "validate-and-merge",
       "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.first().json;\n\nconst body = input.completeBody;\n\nif (!body || !Array.isArray(body.detectedFiles)) {\n  throw new Error(\n    \"Missing completeBody.detectedFiles from analyze-files\"\n  );\n}\n\nconst dockerfiles = body.detectedFiles.filter(\n  path =>\n    /^src\\/[^/]+\\/(?:[^/]+\\/)*Dockerfile$/i.test(path)\n);\n\nconst serviceRoots = new Map();\n\nfor (const path of dockerfiles) {\n  const segments = path.split(\"/\");\n\n  const serviceName = segments[1];\n  const rootPath = segments.slice(0, -1).join(\"/\");\n\n  if (!serviceRoots.has(serviceName)) {\n    serviceRoots.set(serviceName, rootPath);\n  }\n}\n\nconst existing = Array.isArray(body.components)\n  ? body.components\n  : [];\n\nconst components = [...serviceRoots.entries()].map(\n  ([name, rootPath]) => {\n    const match = existing.find(component =>\n      component.rootPath === rootPath\n    );\n\n    return {\n      name,\n      type:\n        name === \"frontend\"\n          ? \"FRONTEND\"\n          : name === \"loadgenerator\"\n            ? \"WORKER\"\n            : match?.type ?? \"BACKEND\",\n      rootPath,\n    };\n  }\n);\n\nconst missing = dockerfiles\n  .map(path => path.slice(0, path.lastIndexOf(\"/\")))\n  .filter(root => !components.some(\n    component => component.rootPath === root\n  ));\n\nif (missing.length > 0) {\n  throw new Error(\n    `Missing Docker components: ${missing.join(\", \")}`\n  );\n}\n\nreturn [{\n  json: {\n    ...input,\n    completeBody: {\n      ...body,\n      components,\n    },\n    componentDiagnostics: {\n      version: \"COMPONENT_FIX_V1\",\n      dockerfileCount: dockerfiles.length,\n      componentCount: components.length,\n      missingDockerRoots: missing,\n      componentNames: components.map(\n        component => component.name\n      ),\n    },\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -704
+      ],
+      "id": "4bec0317-6a39-41c8-a51d-95e50aea4b8c",
+      "name": "ensure-components"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.first().json;\nconst aggregate = $('aggregate-files').first().json;\n\nconst files = Array.isArray(aggregate.files)\n  ? aggregate.files\n  : [];\n\nconst completeBody = input.completeBody;\n\nif (!completeBody || typeof completeBody !== 'object') {\n  throw new Error('Missing completeBody');\n}\n\nif (!Array.isArray(completeBody.components)) {\n  throw new Error('Missing completeBody.components');\n}\n\nconst components = completeBody.components;\n\nconst WORKLOAD_KINDS = new Set([\n  'Deployment',\n  'StatefulSet',\n  'DaemonSet',\n  'Job',\n  'CronJob',\n  'Pod',\n]);\n\nfunction indentOf(line) {\n  return (line.match(/^\\s*/) || [''])[0].length;\n}\n\nfunction isIgnoredLine(line) {\n  const trimmed = line.trim();\n\n  return (\n    trimmed.length === 0 ||\n    trimmed.startsWith('#')\n  );\n}\n\nfunction getValue(lines, key) {\n  const expression = new RegExp(\n    `^\\\\s*(?:-\\\\s*)?${key}:\\\\s*(.*?)\\\\s*$`\n  );\n\n  for (const line of lines) {\n    if (isIgnoredLine(line)) {\n      continue;\n    }\n\n    const match = line.match(expression);\n\n    if (!match) {\n      continue;\n    }\n\n    const raw = match[1]\n      .replace(/\\s+#.*$/, '')\n      .trim();\n\n    if (!raw) {\n      return null;\n    }\n\n    return raw.replace(/^[\"']|[\"']$/g, '');\n  }\n\n  return null;\n}\n\nfunction getNumber(lines, key) {\n  const raw = getValue(lines, key);\n\n  if (raw === null || !/^\\d+$/.test(raw)) {\n    return null;\n  }\n\n  const value = Number(raw);\n\n  return Number.isInteger(value)\n    ? value\n    : null;\n}\n\nfunction getBlock(lines, key) {\n  const expression = new RegExp(\n    `^\\\\s*${key}:\\\\s*(?:#.*)?$`\n  );\n\n  const start = lines.findIndex(line =>\n    !isIgnoredLine(line) &&\n    expression.test(line)\n  );\n\n  if (start < 0) {\n    return [];\n  }\n\n  const baseIndent = indentOf(lines[start]);\n  const result = [];\n\n  for (let i = start + 1; i < lines.length; i++) {\n    const line = lines[i];\n\n    if (isIgnoredLine(line)) {\n      continue;\n    }\n\n    const currentIndent = indentOf(line);\n    const isListItem = /^\\s*-\\s/.test(line);\n\n    if (currentIndent < baseIndent) {\n      break;\n    }\n\n    if (\n      currentIndent === baseIndent &&\n      !isListItem\n    ) {\n      break;\n    }\n\n    result.push(line);\n  }\n\n  return result;\n}\n\nfunction getFirstListItem(lines) {\n  const indexes = lines\n    .map((line, index) => ({\n      line,\n      index,\n      indent: indentOf(line),\n    }))\n    .filter(item =>\n      /^\\s*-\\s/.test(item.line)\n    );\n\n  if (indexes.length === 0) {\n    return [];\n  }\n\n  const firstIndent = Math.min(\n    ...indexes.map(item => item.indent)\n  );\n\n  const first = indexes.find(item =>\n    item.indent === firstIndent\n  );\n\n  const result = [];\n\n  for (let i = first.index; i < lines.length; i++) {\n    const line = lines[i];\n\n    if (isIgnoredLine(line)) {\n      continue;\n    }\n\n    if (i !== first.index) {\n      const currentIndent = indentOf(line);\n\n      if (currentIndent < firstIndent) {\n        break;\n      }\n\n      if (\n        currentIndent === firstIndent &&\n        /^\\s*-\\s/.test(line)\n      ) {\n        break;\n      }\n    }\n\n    result.push(line);\n  }\n\n  return result;\n}\n\nfunction parseResources(containerLines) {\n  const resourcesBlock = getBlock(\n    containerLines,\n    'resources'\n  );\n\n  if (resourcesBlock.length === 0) {\n    return null;\n  }\n\n  const requestsBlock = getBlock(\n    resourcesBlock,\n    'requests'\n  );\n\n  const limitsBlock = getBlock(\n    resourcesBlock,\n    'limits'\n  );\n\n  return {\n    requests: {\n      cpu: getValue(requestsBlock, 'cpu'),\n      memory: getValue(requestsBlock, 'memory'),\n    },\n    limits: {\n      cpu: getValue(limitsBlock, 'cpu'),\n      memory: getValue(limitsBlock, 'memory'),\n    },\n  };\n}\n\nfunction getContainersBlock(lines, kind) {\n  let workloadLines = lines;\n\n  if (kind === 'CronJob') {\n    workloadLines = getBlock(\n      lines,\n      'jobTemplate'\n    );\n  }\n\n  const containersBlock = getBlock(\n    workloadLines,\n    'containers'\n  );\n\n  return getFirstListItem(containersBlock);\n}\n\nfunction parseWorkload(lines, kind, name, sourceFile) {\n  const container = getContainersBlock(\n    lines,\n    kind\n  );\n\n  const portsBlock = getBlock(\n    container,\n    'ports'\n  );\n\n  const firstPort = getFirstListItem(\n    portsBlock\n  );\n\n  const image = getValue(\n    container,\n    'image'\n  );\n\n  const containerPort = getNumber(\n    firstPort,\n    'containerPort'\n  );\n\n  const resources = parseResources(\n    container\n  );\n\n  const spec = getBlock(\n    lines,\n    'spec'\n  );\n\n  const replicas = getNumber(\n    spec,\n    'replicas'\n  );\n\n  return {\n    kind,\n    name,\n    sourceFile,\n    image,\n    containerPort,\n    resources,\n    replicas,\n  };\n}\n\nfunction parseService(lines, name, sourceFile) {\n  const spec = getBlock(\n    lines,\n    'spec'\n  );\n\n  const portsBlock = getBlock(\n    spec,\n    'ports'\n  );\n\n  const firstPort = getFirstListItem(\n    portsBlock\n  );\n\n  const rawTargetPort = getValue(\n    firstPort,\n    'targetPort'\n  );\n\n  let targetPort = null;\n\n  if (rawTargetPort !== null) {\n    targetPort = /^\\d+$/.test(rawTargetPort)\n      ? Number(rawTargetPort)\n      : rawTargetPort;\n  }\n\n  return {\n    kind: 'Service',\n    name,\n    sourceFile,\n    servicePort: getNumber(\n      firstPort,\n      'port'\n    ),\n    targetPort,\n    serviceType: getValue(\n      spec,\n      'type'\n    ),\n  };\n}\n\nfunction parseDocument(content, sourceFile) {\n  const lines = content.split(/\\r?\\n/);\n\n  const kind = getValue(\n    lines,\n    'kind'\n  );\n\n  if (!kind) {\n    return null;\n  }\n\n  const metadataBlock = getBlock(\n    lines,\n    'metadata'\n  );\n\n  const name = getValue(\n    metadataBlock,\n    'name'\n  );\n\n  if (!name) {\n    return null;\n  }\n\n  if (WORKLOAD_KINDS.has(kind)) {\n    return parseWorkload(\n      lines,\n      kind,\n      name,\n      sourceFile\n    );\n  }\n\n  if (kind === 'Service') {\n    return parseService(\n      lines,\n      name,\n      sourceFile\n    );\n  }\n\n  return {\n    kind,\n    name,\n    sourceFile,\n  };\n}\n\nfunction parseManifestFile(file) {\n  const documents = file.content.split(\n    /^\\s*---\\s*$/m\n  );\n\n  return documents\n    .map(document =>\n      parseDocument(\n        document,\n        file.path\n      )\n    )\n    .filter(Boolean);\n}\n\nconst primaryManifestFiles = files.filter(file =>\n  typeof file.path === 'string' &&\n  typeof file.content === 'string' &&\n  /^kubernetes-manifests\\/.*\\.ya?ml$/i.test(\n    file.path\n  ) &&\n  !/\\/kustomization\\.ya?ml$/i.test(\n    file.path\n  )\n);\n\nconst fallbackManifestFiles = files.filter(file =>\n  typeof file.path === 'string' &&\n  typeof file.content === 'string' &&\n  /^kustomize\\/base\\/.*\\.ya?ml$/i.test(\n    file.path\n  ) &&\n  !/\\/kustomization\\.ya?ml$/i.test(\n    file.path\n  )\n);\n\nconst primaryNames = new Set(\n  primaryManifestFiles.map(file =>\n    file.path.split('/').pop()\n  )\n);\n\nconst selectedFallbackFiles =\n  fallbackManifestFiles.filter(file =>\n    !primaryNames.has(\n      file.path.split('/').pop()\n    )\n  );\n\nconst manifestFiles = [\n  ...primaryManifestFiles,\n  ...selectedFallbackFiles,\n];\n\nconst parsedResources = manifestFiles.flatMap(\n  parseManifestFile\n);\n\nconst dockerfiles = files.filter(file =>\n  typeof file.path === 'string' &&\n  typeof file.content === 'string' &&\n  /(^|\\/)Dockerfile$/i.test(\n    file.path\n  )\n);\n\nfunction findDockerfile(component) {\n  const rootPath = component.rootPath || '';\n\n  return dockerfiles.find(file =>\n    file.path === `${rootPath}/Dockerfile` ||\n    file.path.startsWith(`${rootPath}/`)\n  ) ?? null;\n}\n\nfunction getDockerPort(file) {\n  if (!file) {\n    return null;\n  }\n\n  const match = file.content.match(\n    /^\\s*EXPOSE\\s+(\\d+)/m\n  );\n\n  return match\n    ? Number(match[1])\n    : null;\n}\n\nfunction buildEvidence(component) {\n  const name = component.name.toLowerCase();\n\n  const matches = parsedResources.filter(\n    resource =>\n      resource.name.toLowerCase() === name\n  );\n\n  const workload = matches.find(\n    resource =>\n      WORKLOAD_KINDS.has(resource.kind)\n  );\n\n  const services = matches.filter(\n    resource =>\n      resource.kind === 'Service'\n  );\n\n  const service = services.find(\n    resource =>\n      resource.name.toLowerCase() === name\n  ) ?? null;\n\n  const dockerfile = findDockerfile(\n    component\n  );\n\n  const dockerPort = getDockerPort(\n    dockerfile\n  );\n\n  const containerPort =\n    workload?.containerPort ??\n    dockerPort ??\n    null;\n\n  const servicePort =\n    service?.servicePort ?? null;\n\n  const targetPort =\n    service?.targetPort ?? null;\n\n  const image =\n    workload?.image ?? null;\n\n  const resources =\n    workload?.resources ?? null;\n\n  const manifestPaths = [\n    ...new Set(\n      matches.map(resource =>\n        resource.sourceFile\n      )\n    ),\n  ];\n\n  const imageRequiresResolution =\n    Boolean(image) &&\n    !image.includes('/') &&\n    !image.includes('@');\n\n  const portMissing =\n    containerPort === null &&\n    component.type !== 'WORKER';\n\n  const requiresReview =\n    !workload ||\n    !image ||\n    imageRequiresResolution ||\n    portMissing ||\n    !resources ||\n    !resources.requests.cpu ||\n    !resources.requests.memory ||\n    !resources.limits.cpu ||\n    !resources.limits.memory;\n\n  return {\n    name: component.name,\n    type: component.type,\n    rootPath: component.rootPath,\n    workloadKind: workload?.kind ?? null,\n    containerPort,\n    servicePort,\n    targetPort,\n    image,\n    resources,\n    replicas: workload?.replicas ?? null,\n    dockerfilePath: dockerfile?.path ?? null,\n    manifestPaths,\n    requiresReview,\n  };\n}\n\nconst evidence = components.map(\n  buildEvidence\n);\n\nconst evidenceByName = new Map(\n  evidence.map(item => [\n    item.name.toLowerCase(),\n    item\n  ])\n);\n\nconst enrichedComponents = components.map(\n  component => {\n    const item = evidenceByName.get(\n      component.name.toLowerCase()\n    );\n\n    if (!item) {\n      return component;\n    }\n\n    return {\n      ...component,\n      kubernetes: {\n        containerPort: item.containerPort,\n        servicePort: item.servicePort,\n        targetPort: item.targetPort,\n        image: item.image,\n        resources: item.resources,\n        manifestPaths: item.manifestPaths,\n        requiresReview: item.requiresReview,\n      },\n    };\n  }\n);\n\nconst diagnostics = {\n  version: 'K8S_EVIDENCE_V3',\n  scannedManifestFiles: manifestFiles.length,\n  parsedResources: parsedResources.length,\n  componentCount: evidence.length,\n\n  componentsWithWorkload: evidence.filter(\n    item => item.workloadKind !== null\n  ).length,\n\n  componentsWithImage: evidence.filter(\n    item => item.image !== null\n  ).length,\n\n  componentsWithContainerPort: evidence.filter(\n    item => item.containerPort !== null\n  ).length,\n\n  componentsWithServicePort: evidence.filter(\n    item => item.servicePort !== null\n  ).length,\n\n  componentsWithResources: evidence.filter(\n    item => item.resources !== null\n  ).length,\n\n  componentsRequiringReview: evidence.filter(\n    item => item.requiresReview\n  ).length,\n};\n\nreturn [\n  {\n    json: {\n      ...input,\n\n      completeBody: {\n        ...completeBody,\n        components: enrichedComponents,\n      },\n\n      kubernetesEvidence: {\n        ...diagnostics,\n        components: evidence,\n      },\n\n      kubernetesDiagnostics: diagnostics,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        -224
+      ],
+      "id": "cb502880-4d4a-44e7-8cfc-c2474daad194",
+      "name": "extract-kubernetes-evidence"
     }
   ],
   "pinData": {},
@@ -424,13 +450,7 @@
             "index": 0
           }
         ],
-        [
-          {
-            "node": "fail",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "filter": {
@@ -527,7 +547,7 @@
       "main": [
         [
           {
-            "node": "detect-complexity",
+            "node": "ensure-components",
             "type": "main",
             "index": 0
           }
@@ -641,14 +661,41 @@
           }
         ]
       ]
+    },
+    "complete": {
+      "main": [
+        []
+      ]
+    },
+    "ensure-components": {
+      "main": [
+        [
+          {
+            "node": "extract-kubernetes-evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract-kubernetes-evidence": {
+      "main": [
+        [
+          {
+            "node": "detect-complexity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "cfbf689f-5e2a-4fe8-998a-7ec7e5c711a1",
+  "versionId": "b094d5d7-69be-486c-9d03-7e7b6f07cce7",
   "meta": {
     "instanceId": "f683f101dac82048bec3ff9b0a38913feeb98ca30a691f57ea4a4bfcad7141a6"
   },

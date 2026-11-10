@@ -3,8 +3,13 @@
 
 import { useId } from "react";
 
-import type { PlanComponent } from "@/types/deployment-plan";
-import { PLAN_COMPONENT_LABELS } from "@/data/deployment-plan";
+import type {
+  PlanComponent,
+} from "@/types/deployment-plan";
+
+import {
+  PLAN_COMPONENT_LABELS,
+} from "@/data/deployment-plan";
 
 interface Props {
   component: PlanComponent;
@@ -53,7 +58,10 @@ function NumberField({
         disabled={disabled}
         onChange={(event) => {
           const raw = event.target.value;
-          onChange(raw === "" ? undefined : Number(raw));
+
+          onChange(
+            raw === "" ? undefined : Number(raw)
+          );
         }}
         className={INPUT_CLASS}
       />
@@ -67,6 +75,10 @@ export function DeploymentPlanComponentForm({
   disabled = false,
 }: Props) {
   const prefix = useId();
+
+  const isWorker = component.type === "WORKER";
+  const hasContainerPort =
+    component.containerPort !== null;
 
   function updateComponent(
     patch: Partial<PlanComponent>,
@@ -93,6 +105,51 @@ export function DeploymentPlanComponentForm({
     });
   }
 
+  function updateContainerPort(
+    value: number | undefined,
+  ) {
+    const containerPort =
+      value ?? (isWorker ? null : 0);
+
+    updateComponent({
+      containerPort,
+      ...(containerPort === null
+        ? {
+            servicePort: null,
+            targetPort: null,
+            ingress: {
+              ...component.ingress,
+              enabled: false,
+            },
+          }
+        : {}),
+    });
+  }
+
+  function updateServicePort(
+    raw: string,
+  ) {
+    updateComponent({
+      servicePort:
+        raw === "" ? null : Number(raw),
+    });
+  }
+
+  function updateTargetPort(
+    raw: string,
+  ) {
+    const value = raw.trim();
+
+    updateComponent({
+      targetPort:
+        value === ""
+          ? null
+          : /^\d+$/.test(value)
+            ? Number(value)
+            : value,
+    });
+  }
+
   return (
     <div className="rounded-2xl border border-steel/50 bg-panel p-5 shadow-md">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -112,24 +169,29 @@ export function DeploymentPlanComponentForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <NumberField
-          id={`${prefix}-port`}
-          label="Container port"
-          value={component.containerPort || undefined}
-          min={1}
-          max={65535}
-          disabled={disabled}
-          onChange={(value) =>
-            updateComponent({
-              containerPort: value ?? 0,
-            })
-          }
-        />
+        <div className="flex flex-col gap-2">
+          <NumberField
+            id={`${prefix}-container-port`}
+            label="Container port"
+            value={component.containerPort ?? undefined}
+            min={1}
+            max={65535}
+            disabled={disabled}
+            onChange={updateContainerPort}
+          />
+
+          {isWorker ? (
+            <p className="font-display text-body-sm text-mist">
+              Optional for workers that do not expose a network port.
+            </p>
+          ) : null}
+        </div>
 
         <NumberField
           id={`${prefix}-replicas`}
           label="Replicas"
           value={component.replicas}
+          min={1}
           disabled={disabled}
           onChange={(value) =>
             updateComponent({
@@ -137,6 +199,59 @@ export function DeploymentPlanComponentForm({
             })
           }
         />
+
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor={`${prefix}-service-port`}
+            className="font-display text-body-sm text-mist"
+          >
+            Service port
+          </label>
+
+          <input
+            id={`${prefix}-service-port`}
+            type="number"
+            min={1}
+            max={65535}
+            step={1}
+            value={component.servicePort ?? ""}
+            disabled={disabled || !hasContainerPort}
+            onChange={(event) =>
+              updateServicePort(event.target.value)
+            }
+            placeholder="Optional"
+            className={INPUT_CLASS}
+          />
+
+          <p className="font-display text-body-sm text-mist">
+            Port exposed by the Kubernetes Service.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor={`${prefix}-target-port`}
+            className="font-display text-body-sm text-mist"
+          >
+            Target port
+          </label>
+
+          <input
+            id={`${prefix}-target-port`}
+            type="text"
+            value={component.targetPort ?? ""}
+            disabled={disabled || !hasContainerPort}
+            onChange={(event) =>
+              updateTargetPort(event.target.value)
+            }
+            placeholder="Number or named port"
+            className={INPUT_CLASS}
+          />
+
+          <p className="font-display text-body-sm text-mist">
+            Container destination port or named port.
+          </p>
+        </div>
 
         <div className="sm:col-span-2">
           <label
@@ -309,7 +424,7 @@ export function DeploymentPlanComponentForm({
           <input
             type="checkbox"
             checked={component.ingress.enabled}
-            disabled={disabled}
+            disabled={disabled || !hasContainerPort}
             onChange={(event) =>
               updateComponent({
                 ingress: {

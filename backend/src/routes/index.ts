@@ -26,6 +26,7 @@ import { ProjectRepository } from '../repositories/project.repository.js';
 import { AnalysisRepository } from '../repositories/analysis.repository.js';
 import { RecommendationRepository } from '../repositories/recommendation.repository.js';
 import { AuditLogRepository } from '../repositories/audit-log.repository.js';
+import { PlanRepository } from '../repositories/plan.repository.js';
 
 // Functional service factories
 import { createAuthService } from '../services/auth/auth.service.js';
@@ -43,6 +44,13 @@ import { createUserService } from '../services/users/user.service.js';
 import { createUserApprovalService } from '../services/users/user-approval.service.js';
 import { createProfileService } from '../services/profile/profile.service.js';
 import { createAnalysisRouter } from './analysis.routes.js';
+import { createAiDeploymentPlanService } from '../services/ai-deployment-plan/ai-deployment-plan.service.js';
+import { createN8nAiPlanTrigger } from '../services/ai-deployment-plan/n8n-ai-plan-trigger.js';
+import { createAiDeploymentPlanRouter } from './ai-deployment-plan.routes.js';
+import { createDeploymentPlanRouter } from './deployment-plan.routes.js';
+import { createDeploymentPlanService } from '../services/deployment-plans/deployment-plan.service.js';
+
+
 
 /**
  * API composition root.
@@ -65,6 +73,7 @@ export function createApiRouter(): Router {
   const analyses = new AnalysisRepository();
   const recommendations = new RecommendationRepository();
   const auditLogs = new AuditLogRepository();
+  const plans = new PlanRepository();
 
   // Shared services
   const sessions = createSessionTokenService(env.sessionSecret);
@@ -76,8 +85,28 @@ export function createApiRouter(): Router {
   const repositoryLink = createRepositoryLinkService(projects);
   const analysisTrigger = createN8nAnalysisTrigger(env.n8nAnalysisWebhookUrl, env.n8nSharedSecret);
   const recommendationService = createRecommendationService(recommendations, analyses, auditLogs);
+  const deploymentPlanService = createDeploymentPlanService(
+    plans,
+    projects,
+    analyses,
+    recommendations,
+    auditLogs,
+  );
   const aiAuditTrigger = createN8nAiAuditTrigger(env.n8nAiAuditWebhookUrl, env.n8nSharedSecret);
   const aiAuditService = createAiAuditService(aiAuditTrigger, analyses, projects, auditLogs);
+    const aiPlanTrigger = createN8nAiPlanTrigger(
+    env.n8nAiPlanWebhookUrl,
+    env.n8nSharedSecret,
+  );
+
+  const aiDeploymentPlanService = createAiDeploymentPlanService(
+    aiPlanTrigger,
+    plans,
+    projects,
+    analyses,
+    recommendations,
+    auditLogs,
+  );
   const analysisService = createAnalysisService(
     analyses,
     projects,
@@ -128,7 +157,13 @@ export function createApiRouter(): Router {
   router.use('/projects', createRepositoryLinkRouter(repositoryLink, requireAuth));
   router.use('/projects', createAnalysisRouter(analysisService, requireAuth));
   router.use('/projects', createRecommendationRouter(recommendationService, requireAuth));
-  router.use('/projects', createAiAuditRouter(aiAuditService, requireAuth));
+    router.use(
+    '/projects',
+    createAiDeploymentPlanRouter(
+      aiDeploymentPlanService,
+      requireAuth,
+    ),
+  );
 
   router.use(
     '/internal/analyses',
@@ -144,6 +179,27 @@ export function createApiRouter(): Router {
   );
   // Self-scoped profile (self-vs-admin read: mounted at /profile)
   router.use('/profile', createProfileRouter(profileService, requireAuth));
+  router.use(
+  '/projects',
+  createDeploymentPlanRouter(
+    deploymentPlanService,
+    requireAuth,
+  ),
+);
+router.use(
+  '/projects',
+  createDeploymentPlanRouter(
+    deploymentPlanService,
+    requireAuth,
+  ),
+);
 
+router.use(
+  '/projects',
+  createAiDeploymentPlanRouter(
+    aiDeploymentPlanService,
+    requireAuth,
+  ),
+);
   return router;
 }

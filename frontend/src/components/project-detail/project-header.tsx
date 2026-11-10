@@ -10,6 +10,7 @@ const TABS = [
   { id: "overview", label: "Overview" },
   { id: "analyses", label: "Analyses" },
   { id: "recommendations", label: "Recommendations" },
+  { id: "plans", label: "Deployment Plans" },
 ] as const;
 
 export type ProjectTab = (typeof TABS)[number]["id"];

@@ -24,6 +24,7 @@ import { AnalysisSummary } from "@/components/project-detail/analysis-summary";
 import { AnalysesTable } from "@/components/project-detail/analyses-table";
 import { RecommendationFilters } from "@/components/project-detail/recommendation-filters";
 import { RecommendationCard } from "@/components/project-detail/recommendation-card";
+import { DeploymentPlanSection } from "@/components/project-detail/deployment-plan-section";
 import { EditProjectModal } from "@/components/project-detail/edit-project-modal";
 import { UpdateRepositoryModal } from "@/components/project-detail/update-repository-modal";
 import { DeleteProjectModal } from "@/components/dashboard/delete-project-modal";
@@ -40,9 +41,14 @@ function ProjectDetailInner() {
   const toast = useToast();
 
   const tabParam = (searchParams.get("tab") ?? "overview") as ProjectTab;
-  const tab: ProjectTab = ["overview", "analyses", "recommendations"].includes(tabParam)
-    ? tabParam
-    : "overview";
+  const tab: ProjectTab = [
+  "overview",
+  "analyses",
+  "recommendations",
+  "plans",
+].includes(tabParam)
+  ? tabParam
+  : "overview";
   const analysisParam = searchParams.get("analysis");
 
   const [page, setPage] = useState(1);
@@ -336,9 +342,18 @@ useEffect(() => {
               </div>
             ) : null}
           </div>
-        ) : (
-          <RecommendationsSection project={project} analysis={analysisForRecs} />
-        )}
+        ) : tab === "recommendations" ? (
+  <RecommendationsSection
+    project={project}
+    analysis={analysisForRecs}
+  />
+) : (
+  <DeploymentPlanSection
+    key={analysisForRecs?.id ?? "no-analysis"}
+    projectId={project.id}
+    analysis={analysisForRecs}
+  />
+)}
       </div>
 
       <AnimatePresence>

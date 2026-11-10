@@ -1,0 +1,1 @@
+export const INTERNAL_SECRET_HEADER = 'x-internal-secret';

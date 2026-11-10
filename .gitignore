@@ -1,0 +1,4 @@
+.DS_Store
+
+# Stitch reference (local design assets, not versioned)
+.stitch-ref/

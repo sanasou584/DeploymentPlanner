@@ -1,0 +1,57 @@
+{
+  "name": "deploymentplanner-ai-backend",
+  "version": "0.1.0",
+  "description": "DeploymentPlanner AI backend - modular monolith (Express + Mongoose)",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "db:sync-indexes": "tsx --env-file-if-exists=.env src/scripts/sync-indexes.ts",
+    "admin:create": "tsx --env-file-if-exists=.env src/scripts/create-admin.ts",
+    "db:backfill-user-status": "tsx --env-file-if-exists=.env src/scripts/backfill-user-status.ts",
+  "db:backfill-analysis-numbers": "tsx --env-file-if-exists=.env src/scripts/backfill-analysis-numbers.ts"
+  },
+  "dependencies": {
+    "argon2": "^0.45.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "jose": "^6.2.13",
+    "mongoose": "^9.11.2",
+    "pino": "^10.4.0",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^7.2.1",
+    "@types/swagger-ui-express": "^4.1.8",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "mongodb-memory-server": "^11.3.0",
+    "prettier": "^3.9.10",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "mongodb-memory-server@11.3.0": true
+  }
+}

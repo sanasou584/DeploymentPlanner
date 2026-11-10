@@ -173,9 +173,13 @@ export function createApiRouter(): Router {
     '/internal/analyses',
     createRecommendationInternalRouter(recommendationService, requireInternalSecret),
   );
-  router.use(
+    router.use(
     '/internal/analyses',
     createAiAuditInternalRouter(aiAuditService, requireInternalSecret),
+  );
+  router.use(
+    '/projects',
+    createAiAuditRouter(aiAuditService, requireAuth),
   );
   // Self-scoped profile (self-vs-admin read: mounted at /profile)
   router.use('/profile', createProfileRouter(profileService, requireAuth));

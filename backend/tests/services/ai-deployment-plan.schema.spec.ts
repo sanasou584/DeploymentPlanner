@@ -37,49 +37,76 @@ const validProposal = {
 };
 
 describe('AI deployment plan schema', () => {
-  it('accepts a structurally valid proposal', () => {
+  it('accepts a valid proposal', () => {
     const result = aiPlanResultSchema.safeParse(validProposal);
-
     expect(result.success).toBe(true);
   });
 
   it('rejects a missing container port', () => {
-    const invalid = structuredClone(validProposal);
-    const component = invalid.components[0];
+    const component = validProposal.components[0];
 
     if (!component) {
       throw new Error('Test component missing');
     }
 
-    const { containerPort: _port, ...withoutPort } = component;
+    const withoutPort = {
+      ...component,
+      containerPort: undefined,
+    };
+
+    const result = aiPlanResultSchema.safeParse({
+      components: [withoutPort],
+      assumptions: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects zero replicas', () => {
+    const invalid = structuredClone(validProposal);
+    invalid.components[0]!.replicas = 0;
+
+    expect(
+      aiPlanResultSchema.safeParse(invalid).success,
+    ).toBe(false);
+  });
+
+  it('rejects missing HPA enabled', () => {
+    const component = validProposal.components[0];
 
     expect(
       aiPlanResultSchema.safeParse({
-        components: [withoutPort],
+        components: [{
+          ...component,
+          hpa: {},
+        }],
         assumptions: [],
       }).success,
     ).toBe(false);
   });
 
-  it('rejects zero replicas', () => {
-    const invalid = structuredClone(validProposal);
-    const component = invalid.components[0];
+  it('rejects missing Ingress TLS', () => {
+    const component = validProposal.components[0];
 
-    if (!component) {
-      throw new Error('Test component missing');
-    }
-
-    component.replicas = 0;
-
-    expect(aiPlanResultSchema.safeParse(invalid).success).toBe(false);
-  });
-
-  it('rejects additional fields', () => {
     expect(
       aiPlanResultSchema.safeParse({
-        ...validProposal,
-        unexpected: 'value',
+        components: [{
+          ...component,
+          ingress: {
+            enabled: false,
+          },
+        }],
+        assumptions: [],
       }).success,
     ).toBe(false);
+  });
+
+  it('rejects unknown fields', () => {
+    const result = aiPlanResultSchema.safeParse({
+      ...validProposal,
+      unexpected: 'value',
+    });
+
+    expect(result.success).toBe(false);
   });
 });

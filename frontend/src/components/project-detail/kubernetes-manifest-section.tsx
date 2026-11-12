@@ -16,7 +16,9 @@ import {
 import type {
   KubernetesManifest,
 } from "@/types/kubernetes-manifest";
-
+import {
+  KubernetesServerValidation,
+} from "@/components/project-detail/kubernetes-server-validation";
 interface KubernetesManifestSectionProps {
   projectId: string;
   planId: string;
@@ -285,8 +287,19 @@ export function KubernetesManifestSection({
         </p>
       ) : null}
 
-            {files.length > 0 ? (
+                  {files.length > 0 ? (
         <>
+          <KubernetesServerValidation
+            projectId={projectId}
+            planId={planId}
+            eligible={
+              approved &&
+              files.every(
+                (file) =>
+                  file.validation.status === "VALID",
+              )
+            }
+          />
           <div className="mt-5 rounded-xl border border-steel/50 bg-basin p-4">
             <h4 className="font-display text-body-md font-semibold text-foam">
               Kubernetes generation summary

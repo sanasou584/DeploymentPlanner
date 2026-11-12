@@ -54,6 +54,17 @@ import { createKubernetesManifestRouter } from './kubernetes-manifest.routes.js'
 import { createDockerfileProposalsRouter } from './dockerfile-proposals.routes.js';
 import { createDockerfileProposalService } from '../services/dockerfile-proposals/dockerfile-proposals.service.js';
 import {
+  createKubectlValidationClient,
+} from '../services/kubernetes-server-validation/kubectl-validation.client.js';
+
+import {
+  createKubernetesServerValidationService,
+} from '../services/kubernetes-server-validation/kubernetes-server-validation.service.js';
+
+import {
+  createKubernetesServerValidationRouter,
+} from './kubernetes-server-validation.routes.js';
+import {
   createGitHubCicdClient,
 } from '../services/cicd/github-cicd.client.js';
 
@@ -277,6 +288,32 @@ router.use(
       requireAuth,
     ),
   );
+  router.use(
+  '/projects',
+  createKubernetesManifestRouter(
+    kubernetesManifestService,
+    requireAuth,
+  ),
+);
+  if (env.nodeEnv === 'development') {
+    const kubectl = createKubectlValidationClient({
+      context: 'minikube',
+      namespace: 'default',
+    });
+
+    const serverValidationService =
+      createKubernetesServerValidationService(
+        kubectl,
+      );
+
+    router.use(
+      '/projects',
+      createKubernetesServerValidationRouter(
+        serverValidationService,
+        requireAuth,
+      ),
+    );
+  }
 
   return router;
 }

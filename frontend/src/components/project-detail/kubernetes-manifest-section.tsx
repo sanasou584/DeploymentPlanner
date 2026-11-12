@@ -10,6 +10,7 @@ import { KUBERNETES_MANIFEST_TEXT, KUBERNETES_KIND_LABELS, KUBERNETES_VALIDATION
 import {
   useGenerateKubernetesManifestsMutation,
   useListKubernetesManifestsQuery,
+  useValidateKubernetesManifestsMutation,
 } from "@/hooks/use-kubernetes-manifests";
 
 import type {
@@ -57,6 +58,41 @@ function downloadManifest(file: KubernetesManifest): void {
   URL.revokeObjectURL(url);
 }
 
+function downloadAllManifests(
+  files: readonly KubernetesManifest[],
+  planId: string,
+): void {
+  if (files.length === 0) {
+    return;
+  }
+
+  const content = files
+    .map(
+      (file) =>
+        [
+          `# ${file.path}`,
+          file.content.trim(),
+        ].join("\n"),
+    )
+    .join("\n---\n") + "\n";
+
+  const blob = new Blob([content], {
+    type: "application/yaml;charset=utf-8",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  anchor.href = url;
+  anchor.download = `deployment-plan-${planId}-kubernetes.yaml`;
+
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  URL.revokeObjectURL(url);
+}
+
 export function KubernetesManifestSection({
   projectId,
   planId,
@@ -73,12 +109,24 @@ export function KubernetesManifestSection({
     { skip: !approved },
   );
 
-  const [
+    const [
     generateManifests,
     generateState,
   ] = useGenerateKubernetesManifestsMutation();
 
+  const [
+    validateManifests,
+    validateState,
+  ] = useValidateKubernetesManifestsMutation();
+
   const files = manifestsQuery.data?.data ?? [];
+    const deploymentCount = files.filter(
+    (file) => file.kind === "K8S_DEPLOYMENT",
+  ).length;
+
+  const serviceCount = files.filter(
+    (file) => file.kind === "K8S_SERVICE",
+  ).length;
 
   const selectedFile =
     files.find((file) => file.path === selectedPath) ??
@@ -107,6 +155,40 @@ export function KubernetesManifestSection({
       );
     }
   }
+    async function handleValidate() {
+    if (
+      !approved ||
+      files.length === 0 ||
+      validateState.isLoading
+    ) {
+      return;
+    }
+
+    setFeedback(null);
+
+    try {
+      const response = await validateManifests({
+        projectId,
+        planId,
+      }).unwrap();
+
+      const invalid = response.data.filter(
+        (file) => file.validation.status === "INVALID",
+      );
+
+      await manifestsQuery.refetch();
+
+      setFeedback(
+        invalid.length === 0
+          ? "All manifests passed local validation against the approved plan."
+          : `${invalid.length} manifest(s) failed local validation. Review the reported issues.`,
+      );
+    } catch (error) {
+      setFeedback(
+        `Kubernetes manifest validation failed: ${errorMessage(error)}`,
+      );
+    }
+  }
 
   return (
     <section className="rounded-2xl border border-steel bg-panel p-6">
@@ -121,15 +203,37 @@ export function KubernetesManifestSection({
           </p>
         </div>
 
-        <Button
-          disabled={!approved || generateState.isLoading}
-          onClick={() => void handleGenerate()}
-          className="min-h-10 px-5"
-        >
-          {generateState.isLoading
-            ? KUBERNETES_MANIFEST_TEXT.generating
-            : KUBERNETES_MANIFEST_TEXT.generate}
-        </Button>
+                <div className="flex flex-wrap gap-3">
+          <Button
+            disabled={
+              !approved ||
+              generateState.isLoading ||
+              validateState.isLoading
+            }
+            onClick={() => void handleGenerate()}
+            className="min-h-10 px-5"
+          >
+            {generateState.isLoading
+              ? KUBERNETES_MANIFEST_TEXT.generating
+              : KUBERNETES_MANIFEST_TEXT.generate}
+          </Button>
+
+          <Button
+            variant="teal"
+            disabled={
+              !approved ||
+              files.length === 0 ||
+              generateState.isLoading ||
+              validateState.isLoading
+            }
+            onClick={() => void handleValidate()}
+            className="min-h-10 px-5"
+          >
+            {validateState.isLoading
+              ? "Validating manifests..."
+              : "Validate Kubernetes Manifests"}
+          </Button>
+        </div>
       </div>
 
       {!approved ? (
@@ -181,8 +285,47 @@ export function KubernetesManifestSection({
         </p>
       ) : null}
 
-      {files.length > 0 ? (
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+            {files.length > 0 ? (
+        <>
+          <div className="mt-5 rounded-xl border border-steel/50 bg-basin p-4">
+            <h4 className="font-display text-body-md font-semibold text-foam">
+              Kubernetes generation summary
+            </h4>
+
+            <div className="mt-3 flex flex-wrap gap-4 font-display text-body-sm text-mist">
+              <span>
+                Generated files: {files.length}
+              </span>
+
+              <span>
+                Deployments: {deploymentCount}
+              </span>
+
+              <span>
+                Services: {serviceCount}
+              </span>
+            </div>
+
+            <p className="mt-3 text-body-sm text-mist">
+              These manifests have been generated and stored.
+              They have not been applied to a Kubernetes cluster.
+            </p>
+
+            <Button
+              variant="teal"
+              className="mt-4 min-h-10 px-5"
+              onClick={() =>
+                downloadAllManifests(
+                  files,
+                  planId,
+                )
+              }
+            >
+              Download all manifests
+            </Button>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="flex flex-col gap-2">
             {files.map((file) => {
               const active = selectedFile?.id === file.id;
@@ -254,7 +397,8 @@ export function KubernetesManifestSection({
               </>
             ) : null}
           </div>
-        </div>
+                  </div>
+        </>
       ) : null}
     </section>
   );

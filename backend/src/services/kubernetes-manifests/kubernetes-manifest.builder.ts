@@ -3,6 +3,10 @@ import {
   ConflictError,
 } from '../../domain/errors/index.js';
 
+import {
+  toKubernetesName,
+} from './kubernetes-name.js';
+
 import type {
   GeneratedFileKind,
 } from '../../domain/enums/generated-file.enums.js';
@@ -61,11 +65,15 @@ function file(
   basename: string,
   body: YamlValue,
 ): ManifestOutput {
+  const normalizedName = toKubernetesName(
+    component,
+  );
+
   return {
     kind,
     componentName: component,
     fileName: `${basename}.yaml`,
-    path: `k8s/${component}/${basename}.yaml`,
+    path: `k8s/${normalizedName}/${basename}.yaml`,
     content: `${renderYaml(body)}\n`,
   };
 }
@@ -121,7 +129,9 @@ function deployment(
     );
   }
 
-  const name = component.name;
+  const name = toKubernetesName(
+    component.name,
+  );
 
   return file(name, 'K8S_DEPLOYMENT', 'deployment', {
     apiVersion: 'apps/v1',
@@ -167,7 +177,9 @@ function deployment(
 function service(
   component: PlanComponent,
 ): ManifestOutput {
-  const name = component.name;
+  const name = toKubernetesName(
+    component.name,
+  );
 
   return file(name, 'K8S_SERVICE', 'service', {
     apiVersion: 'v1',
@@ -188,7 +200,9 @@ function service(
 function ingress(
   component: PlanComponent,
 ): ManifestOutput {
-  const name = component.name;
+  const name = toKubernetesName(
+    component.name,
+  );
   const host = component.ingress.host;
 
   if (!host) {
@@ -234,7 +248,9 @@ function ingress(
 function hpa(
   component: PlanComponent,
 ): ManifestOutput {
-  const name = component.name;
+  const name = toKubernetesName(
+    component.name,
+  );
   const config = component.hpa;
 
   if (
@@ -297,15 +313,13 @@ export function buildKubernetesManifests(
   const output: ManifestOutput[] = [];
 
   for (const component of components) {
-    const name = component.name;
+        const name = toKubernetesName(
+      component.name,
+    );
 
-    if (
-      !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(name) ||
-      name.length > 63 ||
-      seen.has(name)
-    ) {
+    if (seen.has(name)) {
       throw new ConflictError(
-        `Component name ${name} must be a unique Kubernetes DNS label (max 63 characters)`,
+        `Component name ${component.name} must be a unique Kubernetes DNS label`,
       );
     }
 

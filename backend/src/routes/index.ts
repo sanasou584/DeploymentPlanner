@@ -76,6 +76,13 @@ import {
 import {
   createCicdBuildStatusRouter,
 } from './cicd-build-status.routes.js';
+import {
+  createKubernetesValidationService,
+} from '../services/kubernetes-validation/kubernetes-validation.service.js';
+
+import {
+  createKubernetesValidationRouter,
+} from './kubernetes-validation.routes.js';
 
 /**
  * API composition root.
@@ -134,6 +141,8 @@ export function createApiRouter(): Router {
     auditLogs,
   );
   const kubernetesManifestService = createKubernetesManifestService();
+  const kubernetesValidationService =
+    createKubernetesValidationService();
   const aiAuditTrigger = createN8nAiAuditTrigger(env.n8nAiAuditWebhookUrl, env.n8nSharedSecret);
   const aiAuditService = createAiAuditService(aiAuditTrigger, analyses, projects, auditLogs);
     const aiPlanTrigger = createN8nAiPlanTrigger(
@@ -249,8 +258,8 @@ router.use(
 );
   router.use(
     '/projects',
-    createKubernetesManifestRouter(
-      kubernetesManifestService,
+    createKubernetesValidationRouter(
+      kubernetesValidationService,
       requireAuth,
     ),
   );

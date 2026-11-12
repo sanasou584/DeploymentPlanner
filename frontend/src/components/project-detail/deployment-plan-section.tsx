@@ -2,7 +2,9 @@
 import { useToast } from "@/components/toast/toast-provider";
 import { useState } from "react";
 import { MotionConfig, motion } from "motion/react";
-
+import {
+  classifyAiAssumption,
+} from "@/utils/ai-assumption-status";
 import type { Analysis } from "@/types/analysis";
 import type {
   PlanComponent,
@@ -826,34 +828,65 @@ export function DeploymentPlanSection({
                   </div>
                 </div>
 
-                {selectedAssumptions.length > 0 ? (
-                  <div className="rounded-2xl border border-champagne/40 bg-champagne/10 p-5">
+                                {selectedAssumptions.length > 0 ? (
+                  <div className="rounded-2xl border border-steel/50 bg-basin p-5">
                     <div className="flex items-center gap-3">
                       <MaterialIcon
                         name="info"
-                        className="text-[22px] text-champagne"
+                        className="text-[22px] text-ice"
                       />
 
-                      <h3 className="font-display text-body-md font-semibold text-champagne">
-                        AI assumptions — verify before approval
+                      <h3 className="font-display text-body-md font-semibold text-foam">
+                        {selectedPlan.status === "APPROVED"
+                          ? "AI assumptions — review history"
+                          : "AI assumptions — verify before approval"}
                       </h3>
                     </div>
 
                     <p className="mt-2 font-display text-body-sm text-mist">
-                      These values were proposed without
-                      complete runtime evidence.
+                      {selectedPlan.status === "APPROVED"
+                        ? "This history records assumptions made during plan generation. Approval does not guarantee runtime verification."
+                        : "Review the assumptions and configuration evidence before approving this plan."}
                     </p>
 
-                    <ul className="mt-4 list-disc space-y-2 pl-5">
+                    <ul className="mt-4 space-y-3">
                       {selectedAssumptions.map(
-                        (assumption, index) => (
-                          <li
-                            key={`${index}-${assumption}`}
-                            className="font-display text-body-sm text-foam"
-                          >
-                            {assumption}
-                          </li>
-                        ),
+                        (assumption, index) => {
+                          const assessment =
+                            classifyAiAssumption(
+                              assumption,
+                              selectedPlan.components,
+                            );
+
+                          return (
+                            <li
+                              key={`${index}-${assumption}`}
+                              className="rounded-xl border border-steel/40 bg-abyss p-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={
+                                    assessment.status === "ALIGNED"
+                                      ? "rounded-lg border border-mint/40 px-2 py-1 text-label-sm text-mint"
+                                      : "rounded-lg border border-champagne/40 px-2 py-1 text-label-sm text-champagne"
+                                  }
+                                >
+                                  {assessment.status === "ALIGNED"
+                                    ? "Configuration aligned"
+                                    : "Review required"}
+                                </span>
+                              </div>
+
+                              <p className="mt-2 font-display text-body-sm text-foam">
+                                {assessment.text}
+                              </p>
+
+                              <p className="mt-2 font-display text-label-sm text-mist">
+                                {assessment.explanation}
+                              </p>
+                            </li>
+                          );
+                        },
                       )}
                     </ul>
                   </div>

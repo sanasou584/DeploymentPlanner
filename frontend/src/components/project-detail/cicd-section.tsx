@@ -2,7 +2,9 @@
 "use client";
 
 import { useState } from "react";
-
+import {
+  useGetCicdBuildStatusQuery,
+} from "@/store/cicd-build-status-api";
 import {
   usePreviewCicdQuery,
   useCreateCicdPullRequestMutation,
@@ -62,7 +64,48 @@ export function CicdSection({
   const [createPullRequest, createState] =
     useCreateCicdPullRequestMutation();
 
-  const preview = previewQuery.data?.data;
+    const preview = previewQuery.data?.data;
+
+  const buildStatusQuery =
+    useGetCicdBuildStatusQuery(
+      { projectId, planId },
+      {
+        skip: !approved,
+        pollingInterval: 15000,
+      },
+    );
+
+  const buildStatus = buildStatusQuery.data?.data;
+
+  const workflowMessage = (() => {
+    if (buildStatusQuery.isError) {
+      return "Unable to verify GitHub Actions status.";
+    }
+
+    if (!buildStatus) {
+      return "Checking GitHub Actions workflow status...";
+    }
+
+    const messages: Record<string, string> = {
+      NOT_INSTALLED:
+        "The workflow is not installed in the connected repository.",
+      OUTDATED:
+        "The installed workflow does not match this deployment plan.",
+      NOT_STARTED:
+        "The workflow is installed. No Docker build has been executed yet.",
+      IN_PROGRESS:
+        "Docker build is currently running on GitHub Actions.",
+      SUCCESS:
+        "Docker image build and publication completed successfully.",
+      FAILURE:
+        "The Docker build failed. Review GitHub Actions logs.",
+    };
+
+    return (
+      messages[buildStatus.status] ??
+      "GitHub Actions workflow status is unknown."
+    );
+  })();
 
   async function handleCreatePullRequest() {
     setErrorMessage(null);
@@ -144,9 +187,11 @@ export function CicdSection({
               {preview.workflowPath}
             </p>
 
-            <p className="mt-2 font-display text-body-sm text-mist">
-              The workflow will be proposed through a GitHub
-              Pull Request. No build has been executed yet.
+            <p
+              role="status"
+              className="mt-2 font-display text-body-sm text-mist"
+            >
+              {workflowMessage}
             </p>
           </div>
 

@@ -115,7 +115,13 @@ export function createKubernetesManifestService(
       planId,
     );
 
-    return files.listByPlan(planId);
+        const generated = await files.listByPlan(
+      planId,
+    );
+
+    return generated.filter(
+      (file) => file.kind.startsWith('K8S_'),
+    );
   }
 
   async function generate(
@@ -146,8 +152,10 @@ export function createKubernetesManifestService(
       plan.components,
     );
 
-    const existing = await files.listByPlan(
-      planId,
+    const existing = (
+      await files.listByPlan(planId)
+    ).filter(
+      (file) => file.kind.startsWith('K8S_'),
     );
 
     for (const output of manifests) {

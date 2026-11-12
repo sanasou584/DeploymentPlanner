@@ -42,10 +42,28 @@ export const kubernetesManifestsApi =
           },
         ],
       }),
+
+      validateKubernetesManifests: build.mutation<
+        KubernetesManifestResponse,
+        KubernetesManifestParams
+      >({
+        query: ({ projectId, planId }) => ({
+          url: `/projects/${projectId}/plans/${planId}/manifests/validate`,
+          method: "POST",
+        }),
+
+        invalidatesTags: (_result, _error, { planId }) => [
+          {
+            type: "DeploymentPlans",
+            id: `${planId}-manifests`,
+          },
+        ],
+      }),
     }),
   });
 
 export const {
   useListKubernetesManifestsQuery,
   useGenerateKubernetesManifestsMutation,
+  useValidateKubernetesManifestsMutation,
 } = kubernetesManifestsApi;

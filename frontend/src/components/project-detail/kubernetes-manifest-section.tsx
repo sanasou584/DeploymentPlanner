@@ -6,13 +6,17 @@ import { useState } from "react";
 import { Button } from "@/shared/button";
 
 import { KUBERNETES_MANIFEST_TEXT, KUBERNETES_KIND_LABELS, KUBERNETES_VALIDATION_LABELS } from "@/data/kubernetes-manifest";
-
+import {
+  KubernetesMonitoring,
+} from "@/components/project-detail/kubernetes-monitoring";
 import {
   useGenerateKubernetesManifestsMutation,
   useListKubernetesManifestsQuery,
   useValidateKubernetesManifestsMutation,
 } from "@/hooks/use-kubernetes-manifests";
-
+import {
+  KubernetesDeployment,
+} from "@/components/project-detail/kubernetes-deployment";
 import type {
   KubernetesManifest,
 } from "@/types/kubernetes-manifest";
@@ -289,6 +293,24 @@ export function KubernetesManifestSection({
 
                   {files.length > 0 ? (
         <>
+            <KubernetesDeployment
+  projectId={projectId}
+  planId={planId}
+  eligible={
+    approved &&
+    files.length > 0 &&
+    files.every(
+      (file) =>
+        file.validation.status === "VALID",
+    )
+  }
+/>
+
+<KubernetesMonitoring
+  projectId={projectId}
+  planId={planId}
+  approved={approved}
+/>
           <KubernetesServerValidation
             projectId={projectId}
             planId={planId}

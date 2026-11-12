@@ -51,6 +51,29 @@ import { createDeploymentPlanRouter } from './deployment-plan.routes.js';
 import { createDeploymentPlanService } from '../services/deployment-plans/deployment-plan.service.js';
 import { createKubernetesManifestService } from '../services/kubernetes-manifests/kubernetes-manifest.service.js';
 import { createKubernetesManifestRouter } from './kubernetes-manifest.routes.js';
+
+import {
+  createKubectlMonitoringClient,
+} from '../services/kubernetes-monitoring/kubectl-monitoring.client.js';
+
+import {
+  createKubernetesMonitoringService,
+} from '../services/kubernetes-monitoring/kubernetes-monitoring.service.js';
+
+import {
+  createKubernetesMonitoringRouter,
+} from './kubernetes-monitoring.routes.js';
+import {
+  createKubectlDeploymentClient,
+} from '../services/kubernetes-deployment/kubectl-deployment.client.js';
+
+import {
+  createKubernetesDeploymentService,
+} from '../services/kubernetes-deployment/kubernetes-deployment.service.js';
+
+import {
+  createKubernetesDeploymentRouter,
+} from './kubernetes-deployment.routes.js';
 import { createDockerfileProposalsRouter } from './dockerfile-proposals.routes.js';
 import { createDockerfileProposalService } from '../services/dockerfile-proposals/dockerfile-proposals.service.js';
 import {
@@ -288,13 +311,54 @@ router.use(
       requireAuth,
     ),
   );
-  router.use(
-  '/projects',
-  createKubernetesManifestRouter(
-    kubernetesManifestService,
-    requireAuth,
-  ),
-);
+    router.use(
+    '/projects',
+    createKubernetesManifestRouter(
+      kubernetesManifestService,
+      requireAuth,
+    ),
+  );
+
+  if (env.nodeEnv === 'development') {
+    const monitoringClient =
+      createKubectlMonitoringClient(
+        'minikube',
+        'deploymentplanner-dev',
+      );
+
+    const monitoringService =
+      createKubernetesMonitoringService(
+        monitoringClient,
+      );
+
+    router.use(
+      '/projects',
+      createKubernetesMonitoringRouter(
+        monitoringService,
+        requireAuth,
+      ),
+    );
+  };
+  if (env.nodeEnv === 'development') {
+    const kubectlDeployment =
+      createKubectlDeploymentClient({
+        context: 'minikube',
+        namespace: 'deploymentplanner-dev',
+      });
+
+    const kubernetesDeploymentService =
+      createKubernetesDeploymentService(
+        kubectlDeployment,
+      );
+
+    router.use(
+      '/projects',
+      createKubernetesDeploymentRouter(
+        kubernetesDeploymentService,
+        requireAuth,
+      ),
+    );
+  }
   if (env.nodeEnv === 'development') {
     const kubectl = createKubectlValidationClient({
       context: 'minikube',

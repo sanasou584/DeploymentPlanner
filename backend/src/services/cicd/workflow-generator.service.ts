@@ -10,6 +10,7 @@ export interface WorkflowComponent {
 
 export interface WorkflowInput {
   components: WorkflowComponent[];
+  branch?: string;
 }
 
 function normalizePath(value: string): string {
@@ -119,6 +120,9 @@ export function generateBuildWorkflow(
     '',
     'on:',
     '  workflow_dispatch:',
+    '  push:',
+    '    branches:',
+    `      - ${JSON.stringify(input.branch ?? 'main')}`,
     '',
     'permissions:',
     '  contents: read',

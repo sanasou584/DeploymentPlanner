@@ -65,7 +65,17 @@ import {
   createCicdRouter,
 } from './cicd.routes.js';
 
+import {
+  createGitHubActionsClient,
+} from '../services/cicd-monitor/github-actions.client.js';
 
+import {
+  createCicdBuildStatusService,
+} from '../services/cicd-monitor/cicd-build-status.service.js';
+
+import {
+  createCicdBuildStatusRouter,
+} from './cicd-build-status.routes.js';
 
 /**
  * API composition root.
@@ -96,6 +106,15 @@ export function createApiRouter(): Router {
   const cicdService = createCicdService(
     githubCicd,
   );
+
+    const githubActions = createGitHubActionsClient(
+    env.githubAutomationToken ?? '',
+  );
+
+  const cicdBuildStatusService =
+    createCicdBuildStatusService(
+      githubActions,
+    );
 
   // Shared services
   const sessions = createSessionTokenService(env.sessionSecret);
@@ -239,6 +258,13 @@ router.use(
     '/projects',
     createCicdRouter(
       cicdService,
+      requireAuth,
+    ),
+  );
+    router.use(
+    '/projects',
+    createCicdBuildStatusRouter(
+      cicdBuildStatusService,
       requireAuth,
     ),
   );

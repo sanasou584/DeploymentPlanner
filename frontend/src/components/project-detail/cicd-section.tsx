@@ -8,6 +8,10 @@ import {
   useCreateCicdPullRequestMutation,
 } from "@/store/cicd-api";
 
+import {
+  CicdBuildStatus,
+} from "@/components/project-detail/cicd-build-status";
+
 interface Props {
   projectId: string;
   planId: string;
@@ -87,7 +91,12 @@ export function CicdSection({
           deployment plan.
         </p>
       </div>
-
+        {approved ? (
+        <CicdBuildStatus
+          projectId={projectId}
+          planId={planId}
+        />
+      ) : null}
       {!approved ? (
         <div className="mt-5 rounded-xl border border-champagne/40 bg-champagne/10 p-4">
           <p className="font-display text-body-sm text-champagne">

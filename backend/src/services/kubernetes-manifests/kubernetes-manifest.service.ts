@@ -20,10 +20,19 @@ import {
   type ManifestOutput,
 } from './kubernetes-manifest.builder.js';
 
+import {
+  DockerfileRepository,
+} from '../../repositories/dockerfile.repository.js';
+
+import {
+  assertDockerPortsMatch,
+} from '../plan-quality/docker-port-quality.js';
+
 export function createKubernetesManifestService(
   plans = new PlanRepository(),
   projects = new ProjectRepository(),
   files = new GeneratedFileRepository(),
+  dockerfiles = new DockerfileRepository(),
 ) {
   async function requireProject(
     userId: string,
@@ -120,7 +129,18 @@ export function createKubernetesManifestService(
       planId,
     );
 
-    assertApproved(plan);
+        assertApproved(plan);
+
+    const generatedDockerfiles =
+      await dockerfiles.listForAnalysis(
+        projectId,
+        String(plan.analysis),
+      );
+
+    assertDockerPortsMatch(
+      plan.components,
+      generatedDockerfiles,
+    );
 
     const manifests = buildKubernetesManifests(
       plan.components,

@@ -217,6 +217,7 @@ export function createCicdService(
 
     const workflow = generateBuildWorkflow({
       components,
+      branch: repository.branch,
     });
 
     files.push({

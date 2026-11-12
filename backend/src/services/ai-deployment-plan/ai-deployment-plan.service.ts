@@ -56,6 +56,14 @@ import {
   proposeImageReferences,
 } from '../image-references/image-reference.service.js';
 
+import {
+  DockerfileRepository,
+} from '../../repositories/dockerfile.repository.js';
+
+import {
+  alignGeneratedDockerPorts,
+} from '../plan-quality/docker-port-quality.js';
+
 function validateComponents(
   expected: AiPlanContext['components'],
   generated: AiPlanResult['components'],
@@ -97,7 +105,8 @@ export function createAiDeploymentPlanService(
   projects = new ProjectRepository(),
   analyses = new AnalysisRepository(),
   recommendations = new RecommendationRepository(),
-  audit = new AuditLogRepository(),
+    audit = new AuditLogRepository(),
+  dockerfiles = new DockerfileRepository(),
 ) {
   async function generate(
     userId: string,
@@ -248,8 +257,20 @@ export function createAiDeploymentPlanService(
       context.components,
     );
 
-    assertAiProposalImages(
+        const generatedDockerfiles =
+      await dockerfiles.listForAnalysis(
+        projectId,
+        analysisId,
+      );
+
+    const aligned = alignGeneratedDockerPorts(
       grounded.components,
+      analysis.components,
+      generatedDockerfiles,
+    );
+
+    assertAiProposalImages(
+      aligned.components,
     );
 
         const version =
@@ -270,7 +291,7 @@ export function createAiDeploymentPlanService(
           name: project.repository.name,
         },
         version,
-        components: grounded.components,
+        components: aligned.components,
       });
 
     assertAiProposalImages(
@@ -294,6 +315,7 @@ export function createAiDeploymentPlanService(
     const assumptions = [
       ...proposal.assumptions,
       ...grounded.warnings,
+      ...aligned.warnings,
     ];
 
     await audit.record({

@@ -31,6 +31,14 @@ import {
   proposeImageReferences,
 } from '../image-references/image-reference.service.js';
 
+import {
+  DockerfileRepository,
+} from '../../repositories/dockerfile.repository.js';
+
+import {
+  assertDockerPortsMatch,
+} from '../plan-quality/docker-port-quality.js';
+
 function validateComponents(
   analysis: AnalysisDocument,
   components: CreatePlanBody['components'],
@@ -75,6 +83,7 @@ export function createDeploymentPlanService(
   analyses = new AnalysisRepository(),
   recommendations = new RecommendationRepository(),
   audit = new AuditLogRepository(),
+  dockerfiles = new DockerfileRepository(),
 ) {
   async function requireProject(
     userId: string,
@@ -270,6 +279,17 @@ export function createDeploymentPlanService(
       userId,
       projectId,
       planId,
+    );
+
+        const generatedDockerfiles =
+      await dockerfiles.listForAnalysis(
+        projectId,
+        String(plan.analysis),
+      );
+
+    assertDockerPortsMatch(
+      plan.components,
+      generatedDockerfiles,
     );
 
     assertPlanImagesReady(plan.components);

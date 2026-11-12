@@ -1,4 +1,4 @@
-
+import { randomUUID } from 'node:crypto';
 import { ConflictError } from '../../domain/errors/index.js';
 
 interface GitHubRef {
@@ -10,6 +10,9 @@ interface GitHubRef {
 interface GitHubPullRequest {
   html_url: string;
   number: number;
+}
+interface GitHubContent {
+  sha: string;
 }
 
 export interface GitHubCicdFile {
@@ -36,10 +39,11 @@ const API_URL = 'https://api.github.com';
 export function createGitHubCicdClient(
   token: string,
 ) {
-  async function request<T>(
+    async function request<T>(
     path: string,
     method = 'GET',
     body?: unknown,
+    allowNotFound = false,
   ): Promise<T> {
     let response: Response;
 
@@ -65,9 +69,37 @@ export function createGitHubCicdClient(
       );
     }
 
+        if (response.status === 404 && allowNotFound) {
+      return undefined as T;
+    }
+
     if (!response.ok) {
+      const raw = await response.text();
+
+      let detail = raw;
+
+      try {
+        const parsed = JSON.parse(raw) as {
+          message?: string;
+          errors?: Array<{
+            message?: string;
+          }>;
+        };
+
+        detail = [
+          parsed.message,
+          ...(parsed.errors ?? []).map(
+            (item) => item.message,
+          ),
+        ]
+          .filter(Boolean)
+          .join('; ');
+      } catch {
+        detail = raw.slice(0, 300);
+      }
+
       throw new ConflictError(
-        `GitHub API request failed (${response.status})`,
+        `GitHub API request failed (${response.status}): ${detail.slice(0, 500)}`,
       );
     }
 
@@ -85,7 +117,8 @@ export function createGitHubCicdClient(
       `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}`;
 
     const baseBranch = input.baseBranch;
-    const branch = `deploymentplanner/plan-${input.planId}`;
+    const branch =
+    `deploymentplanner/plan-${input.planId}-${randomUUID().slice(0, 8)}`;
 
     const baseRef = await request<GitHubRef>(
       `${repoPath}/git/ref/heads/${baseBranch.split('/').map(encodeURIComponent).join('/')}`,
@@ -100,11 +133,19 @@ export function createGitHubCicdClient(
       },
     );
 
-    for (const file of input.files) {
+        for (const file of input.files) {
       const filePath = file.path
         .split('/')
         .map(encodeURIComponent)
         .join('/');
+
+      const existing =
+        await request<GitHubContent | undefined>(
+          `${repoPath}/contents/${filePath}?ref=${encodeURIComponent(branch)}`,
+          'GET',
+          undefined,
+          true,
+        );
 
       await request(
         `${repoPath}/contents/${filePath}`,
@@ -116,6 +157,9 @@ export function createGitHubCicdClient(
             'utf8',
           ).toString('base64'),
           branch,
+          ...(existing
+            ? { sha: existing.sha }
+            : {}),
         },
       );
     }

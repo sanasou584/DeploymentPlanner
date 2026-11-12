@@ -27,6 +27,10 @@ import type {
   UpdatePlanComponentBody,
 } from './deployment-plan.schema.js';
 
+import {
+  proposeImageReferences,
+} from '../image-references/image-reference.service.js';
+
 function validateComponents(
   analysis: AnalysisDocument,
   components: CreatePlanBody['components'],
@@ -91,7 +95,22 @@ export function createDeploymentPlanService(
     projectId: string,
     planId: string,
   ): Promise<DeploymentPlanDocument> {
-    await requireProject(userId, projectId);
+        const project = await projects.findByIdForOwner(
+      projectId,
+      userId,
+    );
+
+    if (!project) {
+      throw new NotFoundError(
+        'Project not found',
+      );
+    }
+
+    if (!project.repository?.isValid) {
+      throw new ConflictError(
+        'A verified GitHub repository is required',
+      );
+    }
 
     const plan = await plans.findOne({
       _id: planId,
@@ -105,12 +124,25 @@ export function createDeploymentPlanService(
     return plan;
   }
 
-  async function create(
+    async function create(
     userId: string,
     projectId: string,
     input: CreatePlanBody,
   ): Promise<DeploymentPlanDocument> {
-    await requireProject(userId, projectId);
+    const project = await projects.findByIdForOwner(
+      projectId,
+      userId,
+    );
+
+    if (!project) {
+      throw new NotFoundError('Project not found');
+    }
+
+    if (!project.repository?.isValid) {
+      throw new ConflictError(
+        'A verified GitHub repository is required',
+      );
+    }
 
     const analysis = await analyses.findOneForOwner(
       input.analysisId,
@@ -140,7 +172,16 @@ export function createDeploymentPlanService(
       (item) => item.status === 'ACCEPTED',
     );
 
-    const version = await plans.nextVersionFor(projectId);
+        const version = await plans.nextVersionFor(projectId);
+
+    const proposedComponents = proposeImageReferences({
+      repository: {
+        owner: project.repository.owner,
+        name: project.repository.name,
+      },
+      version,
+      components: input.components,
+    });
 
     const actor = new Types.ObjectId(userId);
 
@@ -149,7 +190,7 @@ export function createDeploymentPlanService(
       analysisId: analysis._id,
       createdBy: actor,
       version,
-      components: input.components,
+      components: proposedComponents,
       recommendations: accepted.map(
         (item) => item._id,
       ),

@@ -243,70 +243,65 @@ describe('deployment plan service', () => {
       ),
     ).rejects.toThrow();
   });
-    it('refuses approval when a container image is missing', async () => {
-    const { user, project, analysis } = await makeFixture();
+  it('proposes an image when none is provided', async () => {
+  const { user, project, analysis } = await makeFixture();
 
-    const plan = await service.create(
-      user.id,
-      project.id,
-      {
-        analysisId: analysis.id,
-        components: [
-          {
-            ...sampleComponent,
-            image: undefined,
-          },
-        ],
-      },
-    );
+  const plan = await service.create(
+    user.id,
+    project.id,
+    {
+      analysisId: analysis.id,
+      components: [
+        {
+          ...sampleComponent,
+          image: undefined,
+        },
+      ],
+    },
+  );
 
-    await expect(
-      service.approve(
-        user.id,
-        project.id,
-        plan.id,
-      ),
-    ).rejects.toThrow(
-      /container image is required/,
-    );
+  expect(plan.components[0]?.image).toBe(
+    'ghcr.io/acme/repo-api:plan-v1',
+  );
 
-    const persisted = await DeploymentPlan.findById(plan.id);
+  const approved = await service.approve(
+    user.id,
+    project.id,
+    plan.id,
+  );
 
-    expect(persisted?.status).toBe('DRAFT');
-    expect(persisted?.review).toBeUndefined();
-  });
+  expect(approved.status).toBe('APPROVED');
+});
 
-  it('refuses approval with a placeholder image', async () => {
-    const { user, project, analysis } = await makeFixture();
+  it('replaces placeholder images automatically', async () => {
+  const { user, project, analysis } = await makeFixture();
 
-    const plan = await service.create(
-      user.id,
-      project.id,
-      {
-        analysisId: analysis.id,
-        components: [
-          {
-            ...sampleComponent,
-            image: 'registry.example.com/api:1.0.0',
-          },
-        ],
-      },
-    );
+  const plan = await service.create(
+    user.id,
+    project.id,
+    {
+      analysisId: analysis.id,
+      components: [
+        {
+          ...sampleComponent,
+          image: 'registry.example.com/api:1.0.0',
+        },
+      ],
+    },
+  );
 
-    await expect(
-      service.approve(
-        user.id,
-        project.id,
-        plan.id,
-      ),
-    ).rejects.toThrow(
-      /placeholder container image is not allowed/,
-    );
+  expect(plan.components[0]?.image).toBe(
+    'ghcr.io/acme/repo-api:plan-v1',
+  );
 
-    const persisted = await DeploymentPlan.findById(plan.id);
+  const approved = await service.approve(
+    user.id,
+    project.id,
+    plan.id,
+  );
 
-    expect(persisted?.status).toBe('DRAFT');
-  });
+  expect(approved.status).toBe('APPROVED');
+});
 
   it('refuses approval by a foreign user', async () => {
     const { user, project, analysis } = await makeFixture();

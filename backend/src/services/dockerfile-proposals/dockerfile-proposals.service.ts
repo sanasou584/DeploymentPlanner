@@ -135,8 +135,14 @@ export function createDockerfileProposalService(
       analysisId,
     );
 
-    const selected = chosen.flatMap((item) =>
-      item?.proposal ? [item.proposal] : []
+        const selected = chosen.flatMap((item) =>
+      item?.proposal
+        ? item.proposal.files.map((file) => ({
+            componentName: item.componentName,
+            path: file.path,
+            content: file.content,
+          }))
+        : []
     );
 
     if (
@@ -156,8 +162,11 @@ export function createDockerfileProposalService(
         await GeneratedFile.generate({
           projectId: new Types.ObjectId(projectId),
           analysisId: analysis._id,
-          kind: 'DOCKERFILE',
-          fileName: 'Dockerfile',
+          kind: item.path.endsWith('/Dockerfile') ||
+            item.path === 'Dockerfile'
+              ? 'DOCKERFILE'
+              : 'DOCKER_ASSET',
+          fileName: item.path.split('/').at(-1)!,
           path: item.path,
           content: item.content,
           componentName: item.componentName,

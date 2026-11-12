@@ -101,7 +101,36 @@ function CandidateCard({
           <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-steel/40 bg-abyss p-4 font-mono text-code-md text-ice">
             <code>{proposal.content}</code>
           </pre>
+                    <div className="mt-4 rounded-lg border border-steel/40 bg-panel p-3">
+            <p className="font-display text-body-sm font-semibold text-foam">
+              Generated files
+            </p>
 
+            <div className="mt-3 space-y-3">
+              {proposal.files.map((file) => (
+                <div
+                  key={file.path}
+                  className="rounded-lg border border-steel/40 bg-basin p-3"
+                >
+                  <p className="break-all font-mono text-code-md text-ice">
+                    {file.path}
+                  </p>
+
+                  <Button
+                    variant="teal"
+                    onClick={() =>
+                      download(
+                        file.path.split("/").at(-1) ?? "file",
+                        file.content,
+                      )
+                    }
+                  >
+                    Download file
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
               variant="teal"
@@ -272,7 +301,7 @@ export function DockerfileProposalsSection({
                 <Button
                   variant="teal"
                   onClick={() =>
-                    download('Dockerfile', file.content)
+                    download(file.fileName, file.content)
                   }
                 >
                   Download

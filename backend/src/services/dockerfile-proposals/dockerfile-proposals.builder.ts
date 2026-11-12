@@ -1,13 +1,31 @@
 
-import type { AnalysisDocument } from '../../models/entities/index.js';
+import type {
+  AnalysisDocument,
+} from '../../models/entities/index.js';
+
+import {
+  createDefaultDockerStrategyRegistry,
+} from './dockerfile-strategy.registry.js';
+
+import {
+  DOCKER_IGNORE,
+  pathIn as strategyPathIn,
+} from './dockerfile-strategy.shared.js';
+
+import type {
+  DockerArtifact,
+  DockerStrategyContext,
+  DockerStrategyResult,
+} from './dockerfile-strategy.types.js';
 
 export interface DockerfileProposal {
   componentName: string;
   rootPath: string;
   path: string;
-  strategy: 'NEXTJS' | 'NODE';
+  strategy: string;
   content: string;
   dockerignore: string;
+  files: DockerArtifact[];
   warnings: string[];
 }
 
@@ -23,25 +41,16 @@ export interface DockerfileCandidate {
 type FileSet = ReadonlySet<string>;
 
 type Template = {
-  id: DockerfileProposal['strategy'];
+  id: string;
   matches(files: FileSet, root: string): boolean;
   render(files: FileSet, root: string): string;
   warnings: readonly string[];
 };
 
-const DEFAULT_IGNORE = [
-  'node_modules',
-  '.git',
-  '.env',
-  '.env.*',
-  '!.env.example',
-  '.next',
-  'dist',
-  'coverage',
-  '*.log',
-].join('\n') + '\n';
-
-function pathIn(root: string, name: string): string {
+function pathIn(
+  root: string,
+  name: string,
+): string {
   return root ? `${root}/${name}` : name;
 }
 
@@ -50,11 +59,18 @@ function hasAny(
   root: string,
   names: readonly string[],
 ): boolean {
-  return names.some((name) => files.has(pathIn(root, name)));
+  return names.some((name) =>
+    files.has(pathIn(root, name)),
+  );
 }
 
-function installCommand(files: FileSet, root: string): string {
-  return files.has(pathIn(root, 'package-lock.json'))
+function installCommand(
+  files: FileSet,
+  root: string,
+): string {
+  return files.has(
+    pathIn(root, 'package-lock.json'),
+  )
     ? 'RUN npm ci'
     : 'RUN npm install';
 }
@@ -62,12 +78,15 @@ function installCommand(files: FileSet, root: string): string {
 const TEMPLATES: readonly Template[] = [
   {
     id: 'NEXTJS',
+
     matches: (files, root) =>
       hasAny(files, root, [
         'next.config.js',
         'next.config.mjs',
         'next.config.ts',
-      ]) && files.has(pathIn(root, 'package.json')),
+        'next.config.mts',
+      ]) &&
+      files.has(pathIn(root, 'package.json')),
 
     render: (files, root) => [
       'FROM node:22-alpine AS build',
@@ -86,9 +105,13 @@ const TEMPLATES: readonly Template[] = [
       ...(
         files.has(pathIn(root, 'public')) ||
         [...files].some((file) =>
-          file.startsWith(pathIn(root, 'public/'))
+          file.startsWith(
+            pathIn(root, 'public/'),
+          )
         )
-          ? ['COPY --from=build /app/public ./public']
+          ? [
+              'COPY --from=build /app/public ./public',
+            ]
           : []
       ),
       'EXPOSE 3000',
@@ -97,15 +120,21 @@ const TEMPLATES: readonly Template[] = [
     ].join('\n'),
 
     warnings: [
-      'Verify package scripts build/start, public directory and browser API URL.',
-      'NEXT_PUBLIC_* values must be set during image build.',
+      'Verify Next.js build and start scripts.',
+      'Verify Next.js runtime configuration.',
+      'Verify environment variables.',
+      'NEXT_PUBLIC_* values must be configured during build.',
+      'Review Node.js version compatibility.',
       'Docker build has not been executed.',
     ],
   },
   {
     id: 'NODE',
+
     matches: (files, root) =>
-      files.has(pathIn(root, 'package.json')),
+      files.has(
+        pathIn(root, 'package.json'),
+      ),
 
     render: (files, root) => [
       'FROM node:22-bookworm-slim AS build',
@@ -114,7 +143,9 @@ const TEMPLATES: readonly Template[] = [
       installCommand(files, root),
       'COPY . .',
       ...(
-        files.has(pathIn(root, 'tsconfig.json'))
+        files.has(
+          pathIn(root, 'tsconfig.json'),
+        )
           ? ['RUN npm run build']
           : []
       ),
@@ -129,14 +160,20 @@ const TEMPLATES: readonly Template[] = [
     ].join('\n'),
 
     warnings: [
-      'Verify package scripts start/build, application port and runtime environment.',
-      'Review production dependencies and use a non-root user before deployment.',
+      'Verify the package.json start script exists.',
+      'Verify build script if TypeScript is detected.',
+      'Verify application port.',
+      'Review production dependencies.',
+      'Review runtime environment variables.',
+      'Use a non-root runtime user before production.',
       'Docker build has not been executed.',
     ],
   },
 ];
 
-function normalizedRoot(path: string): string | null {
+function normalizedRoot(
+  path: string,
+): string | null {
   const value = path
     .replace(/\\/g, '/')
     .replace(/^\.\//, '')
@@ -148,7 +185,9 @@ function normalizedRoot(path: string): string | null {
 
   if (
     value.startsWith('/') ||
-    value.split('/').some((segment) => segment === '..')
+    value.split('/').some(
+      (segment) => segment === '..'
+    )
   ) {
     return null;
   }
@@ -158,86 +197,307 @@ function normalizedRoot(path: string): string | null {
     : null;
 }
 
+function normalizeDetectedFile(
+  path: string,
+): string {
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '');
+}
+
+function isExistingDockerfile(
+  files: FileSet,
+  path: string,
+): boolean {
+  return files.has(path);
+}
+
+function hasUnknownDockerfilePath(
+  analysis: AnalysisDocument,
+  files: FileSet,
+): boolean {
+  if (!analysis.docker.hasDockerfile) {
+    return false;
+  }
+
+  return ![...files].some((file) =>
+    /(^|\/)Dockerfile$/i.test(file),
+  );
+}
+
+function unsupportedCandidate(
+  componentName: string,
+  rootPath: string,
+  path: string,
+  reason: string,
+): DockerfileCandidate {
+  return {
+    componentName,
+    rootPath,
+    path,
+    status: 'UNSUPPORTED',
+    reason,
+  };
+}
+
+function buildArtifacts(
+  root: string,
+  dockerfilePath: string,
+  result: DockerStrategyResult,
+  existingFiles: FileSet,
+): DockerArtifact[] {
+  const artifacts: DockerArtifact[] = [
+    {
+      path: dockerfilePath,
+      content: result.content,
+    },
+  ];
+
+  const ignorePath = strategyPathIn(
+    root,
+    '.dockerignore',
+  );
+
+  if (!existingFiles.has(ignorePath)) {
+    artifacts.push({
+      path: ignorePath,
+      content: DOCKER_IGNORE,
+    });
+  }
+
+  for (const file of result.files) {
+    const normalizedPath = normalizeDetectedFile(
+      file.path,
+    );
+
+    if (
+      existingFiles.has(normalizedPath) ||
+      artifacts.some(
+        (item) => item.path === normalizedPath,
+      )
+    ) {
+      continue;
+    }
+
+    artifacts.push({
+      path: normalizedPath,
+      content: file.content,
+    });
+  }
+
+  return artifacts;
+}
+
+function resolveLegacyTemplate(
+  files: FileSet,
+  root: string,
+  componentType: string,
+): Template | undefined {
+  return TEMPLATES.find((template) => {
+    if (
+      template.id === 'NODE' &&
+      componentType !== 'BACKEND' &&
+      componentType !== 'WORKER'
+    ) {
+      return false;
+    }
+
+    return template.matches(
+      files,
+      root,
+    );
+  });
+}
+
+function buildLegacyResult(
+  template: Template,
+  files: FileSet,
+  root: string,
+): DockerStrategyResult {
+  return {
+    content: template.render(
+      files,
+      root,
+    ),
+    files: [],
+    warnings: [
+      ...template.warnings,
+    ],
+  };
+}
+
+function createProposal(
+  context: DockerStrategyContext,
+  componentName: string,
+  rootPath: string,
+  dockerfilePath: string,
+  existingFiles: FileSet,
+  registry: ReturnType<
+    typeof createDefaultDockerStrategyRegistry
+  >,
+): DockerfileCandidate {
+  const base = {
+    componentName,
+    rootPath,
+    path: dockerfilePath,
+  };
+
+  try {
+    const advanced = registry.resolve(
+      context,
+    );
+
+    const legacy = advanced
+      ? undefined
+      : resolveLegacyTemplate(
+          context.files,
+          context.root,
+          context.componentType,
+        );
+
+    if (!advanced && !legacy) {
+      return unsupportedCandidate(
+        componentName,
+        rootPath,
+        dockerfilePath,
+        'No compatible Dockerfile strategy was detected. Manual review required.',
+      );
+    }
+
+    const result = advanced
+      ? advanced.generate(context)
+      : buildLegacyResult(
+          legacy!,
+          context.files,
+          context.root,
+        );
+
+    if (!result.content.trim()) {
+      return unsupportedCandidate(
+        componentName,
+        rootPath,
+        dockerfilePath,
+        'Dockerfile strategy generated empty content.',
+      );
+    }
+
+    const artifacts = buildArtifacts(
+      context.root,
+      dockerfilePath,
+      result,
+      existingFiles,
+    );
+
+    const proposal: DockerfileProposal = {
+      ...base,
+      strategy:
+        advanced?.id ?? legacy!.id,
+      content: result.content,
+      dockerignore: DOCKER_IGNORE,
+      files: artifacts,
+      warnings: result.warnings,
+    };
+
+    return {
+      ...base,
+      status: 'GENERATABLE',
+      reason:
+        'Dockerfile template and companion files are available for review.',
+      proposal,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Unknown Dockerfile generation error';
+
+    return unsupportedCandidate(
+      componentName,
+      rootPath,
+      dockerfilePath,
+      `Dockerfile generation requires review: ${message}`,
+    );
+  }
+}
+
 export function inspectDockerfiles(
   analysis: AnalysisDocument,
 ): DockerfileCandidate[] {
   const files = new Set(
-    analysis.detectedFiles.map((item) =>
-      item.replace(/\\/g, '/').replace(/^\.\//, '')
+    analysis.detectedFiles.map(
+      normalizeDetectedFile,
     ),
   );
 
+  const registry =
+    createDefaultDockerStrategyRegistry();
+
   return analysis.components.map(
     (component): DockerfileCandidate => {
-      const root = normalizedRoot(component.rootPath);
+      const root = normalizedRoot(
+        component.rootPath,
+      );
 
       if (root === null) {
-        return {
-          componentName: component.name,
-          rootPath: component.rootPath,
-          path: '',
-          status: 'UNSUPPORTED',
-          reason: 'Unsafe or unsupported component root path',
-        };
+        return unsupportedCandidate(
+          component.name,
+          component.rootPath,
+          '',
+          'Unsafe or unsupported component root path.',
+        );
       }
 
-      const path = pathIn(root, 'Dockerfile');
+      const dockerfilePath = pathIn(
+        root,
+        'Dockerfile',
+      );
 
       const base = {
         componentName: component.name,
         rootPath: component.rootPath,
-        path,
+        path: dockerfilePath,
       };
 
-      if (files.has(path)) {
-        return {
-          ...base,
-          status: 'EXISTS',
-          reason: 'Dockerfile detected; will not overwrite',
-        };
-      }
-
       if (
-        analysis.docker.hasDockerfile &&
-        ![...files].some((file) =>
-          /(^|\/)Dockerfile$/i.test(file)
+        isExistingDockerfile(
+          files,
+          dockerfilePath,
         )
       ) {
         return {
           ...base,
-          status: 'UNSUPPORTED',
+          status: 'EXISTS',
           reason:
-            'Analysis reports a Dockerfile but did not provide its path; review before generating',
+            'Dockerfile detected; existing file will not be overwritten.',
         };
       }
 
-      const template = TEMPLATES.find((item) =>
-        item.matches(files, root)
+      if (
+        hasUnknownDockerfilePath(
+          analysis,
+          files,
+        )
+      ) {
+        return unsupportedCandidate(
+          component.name,
+          component.rootPath,
+          dockerfilePath,
+          'Analysis reports a Dockerfile but did not provide its path. Manual review required.',
+        );
+      }
+
+      return createProposal(
+        {
+          root,
+          files,
+          componentType: component.type,
+        },
+        component.name,
+        component.rootPath,
+        dockerfilePath,
+        files,
+        registry,
       );
-
-      if (!template) {
-        return {
-          ...base,
-          status: 'UNSUPPORTED',
-          reason:
-            'No verified Dockerfile template for this component. Manual review required.',
-        };
-      }
-
-      const proposal: DockerfileProposal = {
-        ...base,
-        strategy: template.id,
-        content: template.render(files, root),
-        dockerignore: DEFAULT_IGNORE,
-        warnings: [...template.warnings],
-      };
-
-      return {
-        ...base,
-        status: 'GENERATABLE',
-        reason: 'Template available for human review',
-        proposal,
-      };
     },
   );
 }

@@ -1,6 +1,4 @@
-
 import type { Types } from 'mongoose';
-
 import {
   GeneratedFile,
   type GeneratedFileDocument,
@@ -27,7 +25,7 @@ export class DockerfileRepository extends BaseRepository<
     return this.find({
       project: projectId,
       analysis: analysisId,
-      kind: 'DOCKERFILE',
+      kind: { $in: ['DOCKERFILE', 'DOCKER_ASSET'] },
     });
   }
 }

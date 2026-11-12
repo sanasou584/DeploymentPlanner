@@ -152,7 +152,11 @@ const assertKindDependencies = function assertKindDependencies(
     }
     return;
   }
-  if (kind === 'DOCKERFILE' && !this.get('analysis') && !this.get('plan')) {
+    if (
+    (kind === 'DOCKERFILE' || kind === 'DOCKER_ASSET') &&
+    !this.get('analysis') &&
+    !this.get('plan')
+  ) {
     this.invalidate('analysis', 'A DOCKERFILE needs a plan or an analysis', '', 'required');
   }
 };

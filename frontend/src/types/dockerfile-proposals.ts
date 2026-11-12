@@ -3,9 +3,13 @@ export interface DockerfileProposal {
   componentName: string;
   rootPath: string;
   path: string;
-  strategy: 'NEXTJS' | 'NODE';
+  strategy: string;
   content: string;
   dockerignore: string;
+  files: Array<{
+    path: string;
+    content: string;
+  }>;
   warnings: string[];
 }
 
@@ -20,7 +24,7 @@ export interface DockerfileCandidate {
 
 export interface GeneratedDockerfile {
   id: string;
-  kind: 'DOCKERFILE';
+  kind: 'DOCKERFILE' | 'DOCKER_ASSET';
   componentName: string;
   fileName: string;
   path: string;

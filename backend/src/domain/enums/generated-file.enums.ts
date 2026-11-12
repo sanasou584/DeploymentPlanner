@@ -1,6 +1,7 @@
 /** Kind of generated artifact (Dockerfile, K8s manifests, GitHub Actions workflow). */
 export const GENERATED_FILE_KINDS = [
   'DOCKERFILE',
+  'DOCKER_ASSET',
   'DOCKER_COMPOSE',
   'K8S_DEPLOYMENT',
   'K8S_SERVICE',

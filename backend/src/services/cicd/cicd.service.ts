@@ -110,13 +110,11 @@ export function createCicdService(
       String(plan.analysis),
     );
 
-    const proposedFiles = new Map(
-      generated
-        .filter((file) => file.kind === 'DOCKERFILE')
-        .map((file) => [
-          normalizedPath(file.path),
-          file.content,
-        ]),
+        const proposedFiles = new Map(
+      generated.map((file) => [
+        normalizedPath(file.path),
+        file.content,
+      ]),
     );
 
     const components: WorkflowComponent[] = [];
@@ -180,6 +178,27 @@ export function createCicdService(
         warnings.push(
           `${component.name}: generated Dockerfile requires review and build validation`,
         );
+      }
+
+            const additionalFiles = generated.filter(
+        (file) =>
+          file.componentName === component.name &&
+          file.kind === 'DOCKER_ASSET',
+      );
+
+      for (const asset of additionalFiles) {
+        const assetPath = normalizedPath(asset.path);
+
+        if (existingPaths.has(assetPath)) {
+          continue;
+        }
+
+        if (!files.some((item) => item.path === assetPath)) {
+          files.push({
+            path: assetPath,
+            content: asset.content,
+          });
+        }
       }
 
       components.push({

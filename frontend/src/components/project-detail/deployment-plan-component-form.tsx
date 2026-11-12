@@ -11,6 +11,10 @@ import {
   PLAN_COMPONENT_LABELS,
 } from "@/data/deployment-plan";
 
+import {
+  ImageReferenceHelp,
+} from "@/components/project-detail/image-reference-help";
+
 interface Props {
   component: PlanComponent;
   onChange: (component: PlanComponent) => void;
@@ -261,11 +265,11 @@ export function DeploymentPlanComponentForm({
             Container image
           </label>
 
-          <input
+                    <input
             id={`${prefix}-image`}
             type="text"
             value={component.image ?? ""}
-            placeholder="registry.example.com/app:1.0.0"
+            placeholder="ghcr.io/owner/repository-component:plan-v1"
             disabled={disabled}
             onChange={(event) =>
               updateComponent({
@@ -273,6 +277,16 @@ export function DeploymentPlanComponentForm({
               })
             }
             className={INPUT_CLASS}
+          />
+
+          <ImageReferenceHelp
+            image={component.image}
+            disabled={disabled}
+            onChange={(image) =>
+              updateComponent({
+                image: image || undefined,
+              })
+            }
           />
         </div>
       </div>

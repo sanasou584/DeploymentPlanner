@@ -52,6 +52,10 @@ import type {
   N8nAiPlanTrigger,
 } from './n8n-ai-plan-trigger.js';
 
+import {
+  proposeImageReferences,
+} from '../image-references/image-reference.service.js';
+
 function validateComponents(
   expected: AiPlanContext['components'],
   generated: AiPlanResult['components'],
@@ -248,10 +252,30 @@ export function createAiDeploymentPlanService(
       grounded.components,
     );
 
-    const version =
+        const version =
       await plans.nextVersionFor(
         projectId,
       );
+
+    if (!project.repository?.isValid) {
+      throw new ConflictError(
+        'A verified GitHub repository is required',
+      );
+    }
+
+    const proposedComponents =
+      proposeImageReferences({
+        repository: {
+          owner: project.repository.owner,
+          name: project.repository.name,
+        },
+        version,
+        components: grounded.components,
+      });
+
+    assertAiProposalImages(
+      proposedComponents,
+    );
 
     const actor =
       new Types.ObjectId(userId);
@@ -261,7 +285,7 @@ export function createAiDeploymentPlanService(
       analysisId: analysis._id,
       createdBy: actor,
       version,
-      components: grounded.components,
+      components: proposedComponents,
       recommendations: accepted.map(
         (item) => item._id,
       ),

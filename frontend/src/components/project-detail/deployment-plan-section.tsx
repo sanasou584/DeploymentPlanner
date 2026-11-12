@@ -29,6 +29,10 @@ import {
   useGenerateAiDeploymentPlanMutation,
 } from "@/hooks/use-ai-deployment-plan";
 
+import {
+  CicdSection,
+} from "@/components/project-detail/cicd-section";
+
 interface DeploymentPlanSectionProps {
   projectId: string;
   analysis: Analysis | null;
@@ -933,14 +937,18 @@ export function DeploymentPlanSection({
                     </div>
                   );
                 })}
-
+                <CicdSection
+                  key={`cicd-${selectedPlan.id}`}
+                  projectId={projectId}
+                  planId={selectedPlan.id}
+                  approved={selectedPlan.status === "APPROVED"}
+                />
                 <KubernetesManifestSection
                   key={selectedPlan.id}
                   projectId={projectId}
                   planId={selectedPlan.id}
                   approved={selectedPlan.status === "APPROVED"}
                 />
-
                 {selectedPlan.review?.reason ? (
                   <div className="rounded-xl border border-crimson/40 bg-crimson/10 p-5">
                     <h3 className="font-display text-body-md font-semibold text-crimson">

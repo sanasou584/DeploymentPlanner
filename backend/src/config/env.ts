@@ -24,6 +24,7 @@ const RawEnvSchema = z.object({
     ),
   GITHUB_CLIENT_ID: z.string().trim().min(1, 'GITHUB_CLIENT_ID is required'),
   GITHUB_CLIENT_SECRET: z.string().trim().min(1, 'GITHUB_CLIENT_SECRET is required'),
+  GITHUB_AUTOMATION_TOKEN: z.string().trim().optional(),
   GITHUB_CALLBACK_URL: z.string().trim().url('GITHUB_CALLBACK_URL must be a valid URL'),
   FRONTEND_URL: z.string().trim().url('FRONTEND_URL must be a valid URL'),
   SESSION_SECRET: z
@@ -57,6 +58,7 @@ export type Env = {
   tokenEncryptionKey: Buffer;
   githubClientId: string;
   githubClientSecret: string;
+  githubAutomationToken?: string | undefined;
   githubCallbackUrl: string;
   frontendUrl: string;
   sessionSecret: string;
@@ -105,6 +107,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     tokenEncryptionKey: Buffer.from(parsed.data.TOKEN_ENCRYPTION_KEY, 'base64'),
     githubClientId: parsed.data.GITHUB_CLIENT_ID,
     githubClientSecret: parsed.data.GITHUB_CLIENT_SECRET,
+    githubAutomationToken: parsed.data.GITHUB_AUTOMATION_TOKEN,
     githubCallbackUrl: parsed.data.GITHUB_CALLBACK_URL,
     frontendUrl: parsed.data.FRONTEND_URL,
     sessionSecret: parsed.data.SESSION_SECRET,

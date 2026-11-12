@@ -53,6 +53,17 @@ import { createKubernetesManifestService } from '../services/kubernetes-manifest
 import { createKubernetesManifestRouter } from './kubernetes-manifest.routes.js';
 import { createDockerfileProposalsRouter } from './dockerfile-proposals.routes.js';
 import { createDockerfileProposalService } from '../services/dockerfile-proposals/dockerfile-proposals.service.js';
+import {
+  createGitHubCicdClient,
+} from '../services/cicd/github-cicd.client.js';
+
+import {
+  createCicdService,
+} from '../services/cicd/cicd.service.js';
+
+import {
+  createCicdRouter,
+} from './cicd.routes.js';
 
 
 
@@ -78,6 +89,13 @@ export function createApiRouter(): Router {
   const recommendations = new RecommendationRepository();
   const auditLogs = new AuditLogRepository();
   const plans = new PlanRepository();
+    const githubCicd = createGitHubCicdClient(
+    env.githubAutomationToken ?? '',
+  );
+
+  const cicdService = createCicdService(
+    githubCicd,
+  );
 
   // Shared services
   const sessions = createSessionTokenService(env.sessionSecret);
@@ -214,6 +232,13 @@ router.use(
     '/projects',
     createKubernetesManifestRouter(
       kubernetesManifestService,
+      requireAuth,
+    ),
+  );
+    router.use(
+    '/projects',
+    createCicdRouter(
+      cicdService,
       requireAuth,
     ),
   );
